@@ -40,6 +40,12 @@ jobs:
     - name: Run Analysis
       env:
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        WEBHOOK_CRYPTO: ${{ secrets.WEBHOOK_CRYPTO }}
+        WEBHOOK_TECH: ${{ secrets.WEBHOOK_TECH }}
+        WEBHOOK_ENERGY: ${{ secrets.WEBHOOK_ENERGY }}
+        WEBHOOK_HEALTH: ${{ secrets.WEBHOOK_HEALTH }}
+        WEBHOOK_FINANCE: ${{ secrets.WEBHOOK_FINANCE }}
+        WEBHOOK_CONSUMER: ${{ secrets.WEBHOOK_CONSUMER }}
         # Add other secrets here if needed in the future (e.g. LLM keys)
         # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} 
       run: |
