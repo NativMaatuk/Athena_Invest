@@ -35,6 +35,7 @@ WEBHOOK_ENERGY = os.getenv('WEBHOOK_ENERGY')
 WEBHOOK_HEALTH = os.getenv('WEBHOOK_HEALTH')
 WEBHOOK_FINANCE = os.getenv('WEBHOOK_FINANCE')
 WEBHOOK_CONSUMER = os.getenv('WEBHOOK_CONSUMER')
+WEBHOOK_FEAR_AND_GREED = os.getenv('WEBHOOK_FEAR_AND_GREED') # Market Sentiment / General Info
 
 # Sector to Webhook Mapping
 # Maps yfinance sector names to the corresponding webhook URL variable

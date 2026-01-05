@@ -11,8 +11,10 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from agents import ClassicAnalyzer, DiscordNotifier
+from agents.fear_and_greed_agent import FearAndGreedAgent
+from agents.discord_notifier import FearAndGreedNotifier
 from agents.ticker_info_agent import TickerInfoAgent
-from config import TICKERS, WEBHOOK_URL, SECTOR_CHANNEL_MAP, SECTOR_HEBREW_MAP
+from config import TICKERS, WEBHOOK_URL, SECTOR_CHANNEL_MAP, SECTOR_HEBREW_MAP, WEBHOOK_FEAR_AND_GREED
 
 
 def main():
@@ -40,6 +42,32 @@ def main():
     print("=" * 80)
     print("AthenaInvest - Classic Technical Analysis".center(80))
     print("=" * 80)
+    print()
+    
+    # Fear & Greed Index
+    try:
+        print("🔍 Checking Fear & Greed Index...")
+        fng_agent = FearAndGreedAgent()
+        fng_data = fng_agent.get_data()
+        if fng_data:
+             print(f"   Score: {int(fng_data.get('score'))}")
+             print(f"   Rating: {fng_data.get('rating')}")
+             
+             # Send to Discord
+             fng_webhook = WEBHOOK_FEAR_AND_GREED or WEBHOOK_URL
+             if fng_webhook:
+                 fng_notifier = FearAndGreedNotifier()
+                 if fng_notifier.send_fear_and_greed(fng_data['score'], fng_data['rating'], fng_data['timestamp'], webhook_url=fng_webhook):
+                     print("✅ Sent Fear & Greed to Discord")
+                 else:
+                     print("❌ Failed to send Fear & Greed to Discord")
+             else:
+                 print("ℹ️ No webhook configured for Fear & Greed")
+        else:
+             print("⚠️ Failed to fetch Fear & Greed data")
+    except Exception as e:
+        print(f"⚠️ Error processing Fear & Greed: {e}")
+    
     print()
     
     results = []

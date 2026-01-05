@@ -1,7 +1,33 @@
 import requests
 import time
+import math
+import io
+import json
 from typing import List, Dict, Optional
 from config import WEBHOOK_URL
+from datetime import datetime
+
+print("DEBUG: Loading agents/discord_notifier.py...")
+
+# Lazy import matplotlib to avoid hard dependency at module level if not installed
+try:
+    import matplotlib
+    matplotlib.use('Agg') # Use non-interactive backend
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from matplotlib.patches import Wedge
+    try:
+        from bidi.algorithm import get_display
+        import arabic_reshaper
+        HAS_BIDI = True
+    except ImportError as e:
+        HAS_BIDI = False
+        print(f"Warning: bidi/arabic_reshaper not found ({e}). Hebrew might look reversed.")
+    HAS_MATPLOTLIB = True
+    print("DEBUG: Matplotlib imported successfully.")
+except ImportError as e:
+    HAS_MATPLOTLIB = False
+    print(f"Warning: matplotlib not found ({e}). Fear & Greed gauge will be text-only.")
 
 class BaseDiscordNotifier:
     """
@@ -152,16 +178,9 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
     def send_batch_analysis(self, analyses: List[Dict]) -> bool:
         """
         Sends a batch of analysis results to Discord.
-        Note: This method is less flexible with the new per-sector webhook architecture
-        unless we group by webhook, but kept for compatibility.
         """
         overall_success = True
         
-        # 1. Send Main Header - DISABLED (User request: no point sending to general webhook if division exists)
-        # header = f"🚀 **AthenaInvest Analysis Update** 🚀\n📅 {time.strftime('%Y-%m-%d %H:%M:%S')}"
-        # if not self.send_raw_message(header):
-        #    overall_success = False
-
         # 2. Send each stock as a SEPARATE Message
         for item in analyses:
             ticker = item.get('ticker', 'Unknown')
@@ -181,6 +200,232 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 overall_success = False
         
         return overall_success
+
+class FearAndGreedNotifier(BaseDiscordNotifier):
+    """
+    Specialized notifier for Fear & Greed Index.
+    """
+    
+    def send_fear_and_greed(self, score: float, rating: str, timestamp: str, webhook_url: Optional[str] = None) -> bool:
+        """
+        Sends a visual Fear & Greed Index update.
+        """
+        target_url = webhook_url or self.webhook_url
+        if not target_url:
+            print("Error: No webhook URL provided for Fear & Greed.")
+            return False
+
+        # Build message
+        # Use Embed title style for Status and Score
+        status_line = f"Status: {rating.upper()}"
+        score_line = f"Fear & Greed score {int(score)} ({rating.lower()})"
+        
+        # This was basic content
+        # message_content = f"**{status_line}**\n{score_line}"
+
+        if HAS_MATPLOTLIB:
+            try:
+                print("🎨 Generating Fear & Greed Image...")
+                # Generate Image
+                image_buffer = self._generate_gauge_image(score)
+                image_buffer.seek(0)
+                
+                # DEBUG: Save to disk to verify generation
+                with open("latest_gauge_debug.png", "wb") as f:
+                    f.write(image_buffer.getvalue())
+                print("✅ Image generated and saved to latest_gauge_debug.png")
+                
+                # Reset buffer for reading
+                image_buffer.seek(0)
+                
+                # Create Embed
+                embed = {
+                    "title": "😨 Fear & Greed Index 🤑",
+                    "description": f"**{status_line}**\n{score_line}",
+                    "color": self._get_color_for_score(score),
+                    "image": {
+                        "url": "attachment://gauge.png"
+                    },
+                    "timestamp": datetime.now().isoformat()
+                }
+
+                # Send with file attachment and Embed
+                files = {
+                    'file': ('gauge.png', image_buffer, 'image/png')
+                }
+                
+                payload = {
+                    # "content": message_content, # Optional if we have embed
+                    "embeds": [embed]
+                }
+                
+                response = requests.post(
+                    target_url,
+                    data={'payload_json': json.dumps(payload)},
+                    files=files
+                )
+                response.raise_for_status()
+                return True
+            except Exception as e:
+                print(f"❌ Error generating or sending Fear & Greed image: {e}")
+                import traceback
+                traceback.print_exc()
+                # Fallback to text if image fails?
+                # For now let's just return False so we see the error
+                return False
+        else:
+            # Fallback to text visualization
+            print("❌ Matplotlib not available! Falling back to text visualization. Check logs for import errors.")
+            visualization = self._create_text_visualization(score, rating)
+            message = f"# 😨 Fear & Greed Index 🤑\n"
+            message += f"> **Score:** {int(score)}/100\n"
+            message += f"> **Rating:** {rating.title()}\n"
+            message += f"\n{visualization}"
+
+            try:
+                response = requests.post(
+                    target_url,
+                    json={"content": message},
+                    headers={"Content-Type": "application/json"}
+                )
+                response.raise_for_status()
+                return True
+            except Exception as e:
+                print(f"Error sending Fear & Greed update: {e}")
+                return False
+
+    def _get_color_for_score(self, score: float) -> int:
+        """
+        Returns a Discord integer color based on score.
+        """
+        # 0-25: Extreme Fear (Red)
+        if score < 25: return 0xFF3333
+        # 25-45: Fear (Orange)
+        if score < 45: return 0xFF9933
+        # 45-55: Neutral (Grey/Yellow)
+        if score < 55: return 0xD3D3D3
+        # 55-75: Greed (Light Green)
+        if score < 75: return 0x99CC33
+        # 75-100: Extreme Greed (Dark Green)
+        return 0x339933
+
+    def _generate_gauge_image(self, score: float) -> io.BytesIO:
+        """
+        Generates a gauge chart image using matplotlib.
+        Returns a BytesIO object containing the PNG image.
+        """
+        # Setup
+        # Use Discord Dark theme background color
+        discord_dark = '#2f3136'
+        text_color = 'white'
+        
+        fig, ax = plt.subplots(figsize=(8, 5), subplot_kw={'aspect': 'equal'})
+        
+        # Set background colors
+        fig.patch.set_facecolor(discord_dark)
+        ax.set_facecolor(discord_dark)
+        ax.axis('off')
+        
+        # Define ranges and colors (CNN Fear & Greed style)
+        ranges = [(0, 25), (25, 45), (45, 55), (55, 75), (75, 100)]
+        colors = ['#FF3333', '#FF9933', '#D3D3D3', '#99CC33', '#339933']
+        labels = ['EXTREME\nFEAR', 'FEAR', 'NEUTRAL', 'GREED', 'EXTREME\nGREED']
+        
+        # Draw wedges
+        for idx, (start, end) in enumerate(ranges):
+            theta1 = 180 - (end * 1.8)
+            theta2 = 180 - (start * 1.8)
+            
+            wedge = Wedge((0, 0), 1, theta1, theta2, width=0.4, facecolor=colors[idx], edgecolor=discord_dark, linewidth=2)
+            ax.add_patch(wedge)
+            
+            # Add labels
+            mid_angle = (theta1 + theta2) / 2
+            r = 0.75
+            x = r * np.cos(np.radians(mid_angle))
+            y = r * np.sin(np.radians(mid_angle))
+            
+            rotation = mid_angle - 90
+            
+            # Black text on colored wedges usually reads better, but let's see.
+            ax.text(x, y, labels[idx], ha='center', va='center', fontsize=9, fontweight='bold', rotation=rotation, color='black')
+
+        # Draw Needle
+        angle = 180 - (score * 1.8)
+        angle_rad = np.radians(angle)
+        
+        r_needle = 0.9
+        needle_color = 'white'
+        
+        ax.arrow(0, 0, r_needle * np.cos(angle_rad), r_needle * np.sin(angle_rad), 
+                 head_width=0.05, head_length=0.1, fc=needle_color, ec=needle_color, width=0.02)
+        
+        # Center circle
+        circle = plt.Circle((0, 0), 0.1, color=needle_color)
+        ax.add_patch(circle)
+        
+        # Score Text
+        ax.text(0, -0.2, f"{int(score)}", ha='center', va='center', fontsize=24, fontweight='bold', color=text_color)
+        
+        # Date Text (Hebrew)
+        days = {0: 'שני', 1: 'שלישי', 2: 'רביעי', 3: 'חמישי', 4: 'שישי', 5: 'שבת', 6: 'ראשון'}
+        months = {1: 'ינואר', 2: 'פברואר', 3: 'מרץ', 4: 'אפריל', 5: 'מאי', 6: 'יוני', 
+                  7: 'יולי', 8: 'אוגוסט', 9: 'ספטמבר', 10: 'אוקטובר', 11: 'נובמבר', 12: 'דצמבר'}
+        
+        now = datetime.now()
+        day_name = days[now.weekday()]
+        month_name = months[now.month]
+        
+        date_str = f"תאריך: יום {day_name}, {now.day} ב{month_name} {now.year}"
+        
+        # Handle Hebrew RTL
+        if HAS_BIDI:
+            try:
+                reshaped_text = arabic_reshaper.reshape(date_str)
+                date_str = get_display(reshaped_text)
+            except Exception as e:
+                 print(f"Warning: Failed to reshape Hebrew text: {e}")
+
+        plt.title(date_str, fontsize=14, pad=20, color=text_color)
+        
+        plt.xlim(-1.1, 1.1)
+        plt.ylim(-0.2, 1.2)
+        
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor=discord_dark)
+        plt.close(fig) # Close the figure to free memory
+        return buf
+
+    def _create_text_visualization(self, score: float, rating: str) -> str:
+        """
+        Creates a text-based visual scale for the score (Fallback).
+        """
+        total_segments = 20
+        pointer_idx = min(max(int(score / 5), 0), 19)
+        
+        final_bar = []
+        for i in range(20):
+            val = i * 5
+            if val < 25:
+                base = "🟥"
+            elif val < 45:
+                base = "🟧"
+            elif val < 55:
+                base = "⬜"
+            elif val < 75:
+                base = "🟩"
+            else:
+                base = "🟦"
+            
+            if 45 <= val < 55:
+                 base = "🟨"
+
+            if i == pointer_idx:
+                final_bar.append("🔘")
+            else:
+                final_bar.append(base)
+        
+        return "".join(final_bar)
 
 # For backward compatibility if needed, though we should update main.py
 DiscordNotifier = ClassicAnalysisNotifier
