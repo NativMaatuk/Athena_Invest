@@ -1,0 +1,47 @@
+name: Daily Market Analysis
+
+on:
+  schedule:
+    # Runs at 21:30 UTC (4:30 PM EST / 5:30 PM EDT) Monday-Friday
+    - cron: '30 21 * * 1-5'
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: dev
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install TA-Lib dependencies
+      run: |
+        wget http://prdownloads.sourceforge.net/ta-lib/ta-lib-0.4.0-src.tar.gz
+        tar -xzf ta-lib-0.4.0-src.tar.gz
+        cd ta-lib/
+        ./configure --prefix=/usr
+        make
+        sudo make install
+        cd ..
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run Analysis
+      env:
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }}
+        # Add other secrets here if needed in the future (e.g. LLM keys)
+        # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} 
+      run: |
+        python main_classic.py
+
