@@ -76,10 +76,10 @@ def main():
     for i, ticker in enumerate(TICKERS, 1):
         try:
             # Fetch data and calculate indicators
-            df, days_until_earnings = analyzer.analyze(ticker)
+            df, days_until_earnings, next_earnings_date = analyzer.analyze(ticker)
             
             # Perform classic analysis
-            analysis = analyzer.analyze_classic(df, days_until_earnings)
+            analysis = analyzer.analyze_classic(df, days_until_earnings, next_earnings_date)
             analysis['ticker'] = ticker
             
             # Fetch Ticker Info (Sector, Industry & Summary)
@@ -90,19 +90,20 @@ def main():
             summary = info.get('summary', '')
             market_cap = info.get('market_cap', 'N/A')
             
-            # Format and display output
+            # Format and display output (simplified for CI logs)
             output = analyzer.format_output(ticker, analysis)
-            print(output)
-            print(f"   Sector (EN): {english_sector}")
-            print(f"   Sector (HE): {hebrew_sector}")
-            print(f"   Industry (HE): {hebrew_industry}")
-            print(f"   Market Cap: {market_cap}")
-            print(f"   Summary: {summary}")
             
-            # Add spacing between stocks (except for the last one)
-            if i < len(TICKERS):
-                print()
+            # Simplified Status Print
+            status_icon = "✅" if analysis['is_positive'] else "⛔"
+            status_text = analysis['status'].title()
+            price = analysis['current_price']
             
+            earnings_str = ""
+            if days_until_earnings is not None:
+                earnings_str = f" | Earnings: {days_until_earnings}d"
+                
+            print(f"[{i}/{len(TICKERS)}] {ticker}: {status_icon} {status_text} | ${price:,.2f}{earnings_str}")
+
             # Store results
             results.append({
                 'ticker': ticker,
@@ -133,10 +134,8 @@ def main():
                 })
             
         except Exception as e:
-            print(f"{ticker}")
-            print(f"❌ Error analyzing: {str(e)}")
-            if i < len(TICKERS):
-                print()
+            # Short error print
+            print(f"[{i}/{len(TICKERS)}] {ticker}: ❌ Error: {str(e)}")
             
             results.append({
                 'ticker': ticker,

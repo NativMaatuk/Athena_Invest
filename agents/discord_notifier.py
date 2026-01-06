@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 from config import WEBHOOK_URL
 from datetime import datetime
 
-print("DEBUG: Loading agents/discord_notifier.py...")
+# print("DEBUG: Loading agents/discord_notifier.py...")
 
 # Lazy import matplotlib to avoid hard dependency at module level if not installed
 try:
@@ -20,14 +20,11 @@ try:
         from bidi.algorithm import get_display
         import arabic_reshaper
         HAS_BIDI = True
-    except ImportError as e:
+    except ImportError:
         HAS_BIDI = False
-        print(f"Warning: bidi/arabic_reshaper not found ({e}). Hebrew might look reversed.")
     HAS_MATPLOTLIB = True
-    print("DEBUG: Matplotlib imported successfully.")
-except ImportError as e:
+except ImportError:
     HAS_MATPLOTLIB = False
-    print(f"Warning: matplotlib not found ({e}). Fear & Greed gauge will be text-only.")
 
 class BaseDiscordNotifier:
     """
@@ -67,13 +64,209 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
     Handles formatting and including sector/business info.
     """
     
+    def _bidi_safe(self, text: str) -> str:
+        """
+        Wraps text in a Quote Block (> ) to prevent truncation and allow formatting.
+        Adds > to the start of every line.
+        """
+        # We KEEP the formatting (bold, etc.) as Quote Blocks support it.
+        # Just ensure every line starts with '> '
+        lines = text.split('\n')
+        quoted_lines = [f"> {line}" for line in lines]
+        return "\n".join(quoted_lines)
+
+    def _create_analysis_embed(self, ticker: str, content: str, is_positive: bool,
+                             sector: str = None, industry: str = None, summary: str = None, 
+                             market_cap: str = None, earnings_info: str = None) -> Dict:
+        """
+        Creates a structured Discord Embed object from the analysis content.
+        Parses the text content into sections for better readability.
+        """
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        if not lines:
+            return {}
+
+        # 1. Header & Title
+        # Raw: "**TICKER** - 123.45$" -> Target Title: "🟢 TICKER - 123.45$"
+        status_icon = "🟢" if is_positive else "🔴"
+        color = 0x2ecc71 if is_positive else 0xe74c3c
+        
+        header_line = lines[0].replace('**', '')
+        title = f"{status_icon} {header_line}"
+        
+        # 2. Parse Content Sections
+        sections = {
+            "events": [],
+            "signal": None,
+            "status": [],
+            "risk": None,
+            "strategy": [],
+            "summary_text": None
+        }
+        
+        current_section = None
+        
+        # Skip header line
+        for i in range(1, len(lines)):
+            line = lines[i]
+            
+            # Events (Date/Earnings)
+            if "📅" in line or "⏳" in line:
+                sections["events"].append(line)
+                continue
+                
+            # Signal (Entry/No Entry)
+            if "🎯" in line or "⛔" in line:
+                sections["signal"] = line.replace("**", "")
+                current_section = None
+                continue
+                
+            # Status
+            if "סטטוס נוכחי" in line:
+                current_section = "status"
+                sections["status"].append(line.replace("**", ""))
+                continue
+                
+            # Risk
+            if "רמת סיכון" in line or "אזהרת סיכון" in line:
+                sections["risk"] = line
+                current_section = None
+                continue
+                
+            # Strategy (Instructions)
+            if "הוראה:" in line:
+                current_section = "strategy"
+                sections["strategy"].append(line)
+                continue
+            
+            # Summary (Last line is treated as summary if not matched elsewhere)
+            if i == len(lines) - 1:
+                sections["summary_text"] = line
+                current_section = None
+                continue
+
+            # Append description lines to current section
+            if current_section == "status":
+                sections["status"].append(line)
+            elif current_section == "strategy":
+                sections["strategy"].append(line)
+        
+        # 3. Build Fields
+        fields = []
+        
+        # Market Data Fields (Inline - Label in Name, Value in Value as header trick or just Name)
+        # User requested: "שווי שוק: $1.84T" in one line.
+        # We use the Name for the content and a zero-width space for the value to ensure it renders as a "header" field.
+        if market_cap:
+            fields.append({"name": f"💰 שווי שוק: {market_cap}", "value": "\u200b", "inline": True})
+        if sector:
+            fields.append({"name": f"🏢 סקטור: {sector}", "value": "\u200b", "inline": True})
+        if industry:
+            fields.append({"name": f"🏭 תעשייה: {industry}", "value": "\u200b", "inline": True})
+            
+        # Events (Earnings only, date is in footer)
+        # Prioritize explicit earnings_info if provided
+        if earnings_info:
+             fields.append({
+                "name": "📅 אירועים",
+                "value": self._bidi_safe(earnings_info) if not earnings_info.startswith("\u200f") else self._bidi_safe(earnings_info),
+                "inline": False
+            })
+        else:
+            # Fallback to parsing
+            earnings_lines = [line for line in sections["events"] if "⏳" in line]
+            if earnings_lines:
+                fields.append({
+                    "name": "📅 אירועים",
+                    "value": "\n".join(earnings_lines),
+                    "inline": False
+                })
+            
+        # Technical Signal
+        if sections["signal"]:
+            fields.append({
+                "name": "🎯 איתות טכני",
+                "value": self._bidi_safe(sections["signal"]),
+                "inline": False
+            })
+            
+        # Status
+        if sections["status"]:
+            # First line is the header (e.g. "Status: Breakout"), rest is description
+            status_val = "\n".join([self._bidi_safe(line) for line in sections["status"]])
+            fields.append({
+                "name": "🚀 סטטוס",
+                "value": status_val,
+                "inline": False
+            })
+
+        # Risk
+        if sections["risk"]:
+            fields.append({
+                "name": "⚖️ סיכון",
+                "value": self._bidi_safe(sections["risk"]),
+                "inline": False
+            })
+            
+        # Strategy
+        if sections["strategy"]:
+            strategy_val = "\n".join([self._bidi_safe(line) for line in sections["strategy"]])
+            fields.append({
+                "name": "💡 הוראה",
+                "value": strategy_val,
+                "inline": False
+            })
+
+        # Technical Summary (from text analysis)
+        if sections["summary_text"]:
+            clean_tech_summary = sections["summary_text"].replace("📝 **סיכום:**", "").strip()
+            # If it starts with "סיכום:", remove it too
+            if clean_tech_summary.startswith("סיכום:"):
+                 clean_tech_summary = clean_tech_summary.replace("סיכום:", "", 1).strip()
+            
+            fields.append({
+                "name": "📝 סיכום טכני",
+                "value": self._bidi_safe(clean_tech_summary),
+                "inline": False
+            })
+
+        # Company Profile (from API)
+        if summary:
+            if len(summary) > 1024:
+                summary = summary[:1021] + "..."
+            
+            fields.append({
+                "name": "ℹ️ פרופיל חברה",
+                "value": self._bidi_safe(summary),
+                "inline": False
+            })
+
+        # 4. Construct Embed
+        embed = {
+            "title": title,
+            "color": color,
+            "fields": fields,
+            "footer": {
+                "text": f"Athena Invest Analysis • {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+            }
+        }
+        
+        return embed
+
     def send_analysis_message(self, ticker: str, content: str, is_positive: bool, 
                               sector: str = None, industry: str = None, summary: str = None, 
-                              market_cap: str = None, webhook_url: Optional[str] = None) -> bool:
+                              market_cap: str = None, webhook_url: Optional[str] = None,
+                              earnings_info: str = None) -> bool:
         """
-        Sends the analysis as a formatted text message.
+        Sends the analysis as a structured Discord Embed.
         """
-        formatted_message = self._beautify_content(content, is_positive, sector, industry, summary, market_cap)
+        # Create the embed
+        embed = self._create_analysis_embed(ticker, content, is_positive, sector, industry, summary, market_cap, earnings_info)
+        
+        # DEBUG: Print JSON for verification
+        # print(f"\n🔍 Generated JSON for {ticker}:")
+        # print(json.dumps(embed, indent=2, ensure_ascii=False))
+        # print("-" * 50)
 
         target_url = webhook_url or self.webhook_url
         if not target_url:
@@ -84,7 +277,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             response = requests.post(
                 target_url,
                 json={
-                    "content": formatted_message
+                    "embeds": [embed]
                 },
                 headers={"Content-Type": "application/json"}
             )
@@ -97,8 +290,8 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
 
     def _beautify_content(self, content: str, is_positive: bool, sector: str = None, industry: str = None, summary: str = None, market_cap: str = None) -> str:
         """
+        DEPRECATED: Now using _create_analysis_embed.
         Parses raw analysis output and reformats it into high-end Discord Markdown.
-        Adds Sector, Industry and Summary info if available.
         """
         lines = [line.strip() for line in content.split('\n') if line.strip()]
         if not lines:
@@ -192,11 +385,21 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             market_cap = item.get('market_cap')
             webhook_url = item.get('webhook_url') # Allow overriding per item
             
+            # Extract Earnings Info specifically
+            earnings_days = analysis_data.get('days_until_earnings')
+            earnings_date = analysis_data.get('next_earnings_date')
+            earnings_info_str = None
+            
+            if earnings_days is not None:
+                 date_part = f" ({earnings_date.strftime('%d.%m.%Y')})" if earnings_date else ""
+                 earnings_info_str = f"⏳ ימים לדווח תוצאות: {earnings_days}{date_part}"
+            
             # Determine color/positive
             is_positive = analysis_data.get('is_positive', False)
             
             if not self.send_analysis_message(ticker=ticker, content=output, is_positive=is_positive,
-                                              sector=sector, industry=industry, summary=summary, market_cap=market_cap, webhook_url=webhook_url):
+                                              sector=sector, industry=industry, summary=summary, market_cap=market_cap, webhook_url=webhook_url,
+                                              earnings_info=earnings_info_str):
                 overall_success = False
         
         return overall_success
@@ -225,15 +428,15 @@ class FearAndGreedNotifier(BaseDiscordNotifier):
 
         if HAS_MATPLOTLIB:
             try:
-                print("🎨 Generating Fear & Greed Image...")
+                # print("🎨 Generating Fear & Greed Image...")
                 # Generate Image
                 image_buffer = self._generate_gauge_image(score)
                 image_buffer.seek(0)
                 
                 # DEBUG: Save to disk to verify generation
-                with open("latest_gauge_debug.png", "wb") as f:
-                    f.write(image_buffer.getvalue())
-                print("✅ Image generated and saved to latest_gauge_debug.png")
+                # with open("latest_gauge_debug.png", "wb") as f:
+                #    f.write(image_buffer.getvalue())
+                # print("✅ Image generated and saved to latest_gauge_debug.png")
                 
                 # Reset buffer for reading
                 image_buffer.seek(0)

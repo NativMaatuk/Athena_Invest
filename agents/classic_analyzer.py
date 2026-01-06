@@ -25,7 +25,7 @@ class ClassicAnalyzer:
     Classic technical analysis agent that analyzes stocks based on SMA_150 and ATR.
     """
     
-    def analyze(self, ticker: str) -> Tuple[pd.DataFrame, Optional[int]]:
+    def analyze(self, ticker: str) -> Tuple[pd.DataFrame, Optional[int], Optional[datetime]]:
         """
         Fetch historical data and calculate SMA_150 and ATR.
         Also attempts to fetch the next earnings date.
@@ -37,6 +37,7 @@ class ClassicAnalyzer:
             Tuple containing:
             - DataFrame with at least 30 rows containing SMA_150 and ATR
             - Optional[int]: Days until next earnings report (None if not available)
+            - Optional[datetime]: Next earnings date (None if not available)
         """
         # Fetch historical data based on configuration
         stock = yf.Ticker(ticker)
@@ -44,6 +45,7 @@ class ClassicAnalyzer:
         
         # Calculate days until earnings
         days_until_earnings = None
+        next_earnings_date = None
         try:
             # Try to get earnings dates
             earnings_dates = stock.earnings_dates
@@ -58,6 +60,7 @@ class ClassicAnalyzer:
                 future_dates = dates[dates > now]
                 if not future_dates.empty:
                     next_date = future_dates.min()
+                    next_earnings_date = next_date
                     # Calculate difference in days
                     days_until_earnings = (next_date - now).days
         except Exception:
@@ -80,15 +83,16 @@ class ClassicAnalyzer:
         df['ATR'] = talib.ATR(df['High'].values, df['Low'].values, df['Close'].values, timeperiod=ATR_PERIOD)
         
         # Return at least the last 30 rows (for resistance calculation) and earnings info
-        return df.tail(max(30, RESISTANCE_LOOKBACK)), days_until_earnings
+        return df.tail(max(30, RESISTANCE_LOOKBACK)), days_until_earnings, next_earnings_date
     
-    def analyze_classic(self, df: pd.DataFrame, days_until_earnings: Optional[int] = None) -> Dict:
+    def analyze_classic(self, df: pd.DataFrame, days_until_earnings: Optional[int] = None, next_earnings_date: Optional[datetime] = None) -> Dict:
         """
         Perform classic technical analysis based on SMA_150 and ATR.
         
         Args:
             df: DataFrame with SMA_150 and ATR columns
             days_until_earnings: Days until next earnings report (optional)
+            next_earnings_date: Next earnings date (optional)
             
         Returns:
             Dictionary with analysis results
@@ -155,7 +159,8 @@ class ClassicAnalyzer:
             'atr_pct': atr_pct,
             'atr_warning': atr_warning,
             'status': status,
-            'days_until_earnings': days_until_earnings
+            'days_until_earnings': days_until_earnings,
+            'next_earnings_date': next_earnings_date
         }
     
     def _calculate_sma_slope(self, df: pd.DataFrame) -> str:
@@ -266,8 +271,14 @@ class ClassicAnalyzer:
         
         # Line 3: Earnings (if available)
         days_until = analysis.get('days_until_earnings')
+        next_date = analysis.get('next_earnings_date')
+        
         if days_until is not None:
-            lines.append(f"\u200f⏳ ימים לדווח תוצאות: {days_until}")
+            date_info = ""
+            if next_date and isinstance(next_date, datetime):
+                date_info = f" ({next_date.strftime('%d.%m.%Y')})"
+            
+            lines.append(f"\u200f⏳ ימים לדווח תוצאות: {days_until}{date_info}")
         
         # Entry zone or no entry message
         if analysis['is_positive']:
