@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Tickers list for initial analysis
-TICKERS = ['NVDA', 'GOOGL', 'TSLA', 'AMZN', 'APPL', 'MSFT', 'META', 'META', 'AMD', 'PLTR', 'SPOT', 'INDO', 'DXYZ', 'ORCL', 'ASTS', 'QCLS', 'LAES', 'NB', 'BTC-USD', 'ETH-USD', 'XRP-USD']
+TICKERS = ['NVDA', 'GOOGL', 'TSLA', 'AMZN', 'AAPL', 'MSFT', 'META', 'META', 'AMD', 'PLTR', 'SPOT', 'INDO', 'HUSA', 'DXYZ', 'ORCL', 'ASTS', 'QCLS', 'LAES', 'NB', 'BTC-USD', 'ETH-USD', 'XRP-USD']
 
 # Scoring weights
 WEIGHT_TECH = 0.4  # 40% weight for technical score
