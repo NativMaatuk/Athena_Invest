@@ -46,6 +46,7 @@ jobs:
         WEBHOOK_HEALTH: ${{ secrets.WEBHOOK_HEALTH }}
         WEBHOOK_FINANCE: ${{ secrets.WEBHOOK_FINANCE }}
         WEBHOOK_CONSUMER: ${{ secrets.WEBHOOK_CONSUMER }}
+        WEBHOOK_FEAR_AND_GREED: ${{ secrets.WEBHOOK_FEAR_AND_GREED }}
         # Add other secrets here if needed in the future (e.g. LLM keys)
         # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} 
       run: |

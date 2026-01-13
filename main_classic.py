@@ -11,8 +11,10 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from agents import ClassicAnalyzer, DiscordNotifier
+from agents.fear_and_greed_agent import FearAndGreedAgent
+from agents.discord_notifier import FearAndGreedNotifier
 from agents.ticker_info_agent import TickerInfoAgent
-from config import TICKERS, WEBHOOK_URL, SECTOR_CHANNEL_MAP, SECTOR_HEBREW_MAP
+from config import TICKERS, WEBHOOK_URL, SECTOR_CHANNEL_MAP, SECTOR_HEBREW_MAP, WEBHOOK_FEAR_AND_GREED
 
 
 def main():
@@ -42,16 +44,42 @@ def main():
     print("=" * 80)
     print()
     
+    # Fear & Greed Index
+    try:
+        print("🔍 Checking Fear & Greed Index...")
+        fng_agent = FearAndGreedAgent()
+        fng_data = fng_agent.get_data()
+        if fng_data:
+             print(f"   Score: {int(fng_data.get('score'))}")
+             print(f"   Rating: {fng_data.get('rating')}")
+             
+             # Send to Discord
+             fng_webhook = WEBHOOK_FEAR_AND_GREED or WEBHOOK_URL
+             if fng_webhook:
+                 fng_notifier = FearAndGreedNotifier()
+                 if fng_notifier.send_fear_and_greed(fng_data['score'], fng_data['rating'], fng_data['timestamp'], webhook_url=fng_webhook):
+                     print("✅ Sent Fear & Greed to Discord")
+                 else:
+                     print("❌ Failed to send Fear & Greed to Discord")
+             else:
+                 print("ℹ️ No webhook configured for Fear & Greed")
+        else:
+             print("⚠️ Failed to fetch Fear & Greed data")
+    except Exception as e:
+        print(f"⚠️ Error processing Fear & Greed: {e}")
+    
+    print()
+    
     results = []
     discord_analyses = []  # Store analyses for Discord
     
     for i, ticker in enumerate(TICKERS, 1):
         try:
             # Fetch data and calculate indicators
-            df, days_until_earnings = analyzer.analyze(ticker)
+            df, days_until_earnings, next_earnings_date = analyzer.analyze(ticker)
             
             # Perform classic analysis
-            analysis = analyzer.analyze_classic(df, days_until_earnings)
+            analysis = analyzer.analyze_classic(df, days_until_earnings, next_earnings_date)
             analysis['ticker'] = ticker
             
             # Fetch Ticker Info (Sector, Industry & Summary)
@@ -62,19 +90,20 @@ def main():
             summary = info.get('summary', '')
             market_cap = info.get('market_cap', 'N/A')
             
-            # Format and display output
+            # Format and display output (simplified for CI logs)
             output = analyzer.format_output(ticker, analysis)
-            print(output)
-            print(f"   Sector (EN): {english_sector}")
-            print(f"   Sector (HE): {hebrew_sector}")
-            print(f"   Industry (HE): {hebrew_industry}")
-            print(f"   Market Cap: {market_cap}")
-            print(f"   Summary: {summary}")
             
-            # Add spacing between stocks (except for the last one)
-            if i < len(TICKERS):
-                print()
+            # Simplified Status Print
+            status_icon = "✅" if analysis['is_positive'] else "⛔"
+            status_text = analysis['status'].title()
+            price = analysis['current_price']
             
+            earnings_str = ""
+            if days_until_earnings is not None:
+                earnings_str = f" | Earnings: {days_until_earnings}d"
+                
+            print(f"[{i}/{len(TICKERS)}] {ticker}: {status_icon} {status_text} | ${price:,.2f}{earnings_str}")
+
             # Store results
             results.append({
                 'ticker': ticker,
@@ -105,10 +134,8 @@ def main():
                 })
             
         except Exception as e:
-            print(f"{ticker}")
-            print(f"❌ Error analyzing: {str(e)}")
-            if i < len(TICKERS):
-                print()
+            # Short error print
+            print(f"[{i}/{len(TICKERS)}] {ticker}: ❌ Error: {str(e)}")
             
             results.append({
                 'ticker': ticker,

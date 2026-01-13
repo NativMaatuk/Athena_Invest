@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Tickers list for initial analysis
-TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'LAES', 'NB', 'TSLA', 'NVDA', 'BTC-USD', 'ETH-USD']
+TICKERS = ['NVDA', 'GOOGL', 'TSLA', 'AMZN', 'AAPL', 'MSFT', 'META', 'META', 'AMD', 'PLTR', 'SPOT', 'INDO', 'HUSA', 'DXYZ', 'ORCL', 'ASTS', 'QCLS', 'LAES', 'NB', 'BTC-USD', 'ETH-USD', 'XRP-USD']
 
 # Scoring weights
 WEIGHT_TECH = 0.4  # 40% weight for technical score
@@ -35,6 +35,7 @@ WEBHOOK_ENERGY = os.getenv('WEBHOOK_ENERGY')
 WEBHOOK_HEALTH = os.getenv('WEBHOOK_HEALTH')
 WEBHOOK_FINANCE = os.getenv('WEBHOOK_FINANCE')
 WEBHOOK_CONSUMER = os.getenv('WEBHOOK_CONSUMER')
+WEBHOOK_FEAR_AND_GREED = os.getenv('WEBHOOK_FEAR_AND_GREED') # Market Sentiment / General Info
 
 # Sector to Webhook Mapping
 # Maps yfinance sector names to the corresponding webhook URL variable
