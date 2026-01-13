@@ -246,8 +246,9 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             "title": title,
             "color": color,
             "fields": fields,
+            "timestamp": datetime.now().astimezone().isoformat(),
             "footer": {
-                "text": f"Athena Invest Analysis • {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                "text": "Athena Invest Analysis"
             }
         }
         
@@ -449,7 +450,7 @@ class FearAndGreedNotifier(BaseDiscordNotifier):
                     "image": {
                         "url": "attachment://gauge.png"
                     },
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().astimezone().isoformat()
                 }
 
                 # Send with file attachment and Embed
