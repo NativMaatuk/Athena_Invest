@@ -35,7 +35,7 @@ jobs:
         DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
         # Internal timeout for the script (in hours)
         # Should be slightly less than the cron interval to allow for spin-up time
-        RUN_DURATION_HOURS: 4.98 # 4 hours and 58 minutes
+        RUN_DURATION_HOURS: 4.988 # 4 hours and 58 minutes
         # Add other environment variables if needed
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} 
         WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }} # Keep existing webhooks valid if used by code

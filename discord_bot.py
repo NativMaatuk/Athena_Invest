@@ -71,11 +71,13 @@ async def on_message(message):
     
     # בדיקה שזה נראה כמו טיקר (מילה אחת, אורך סביר, מכיל רק אותיות/מספרים/נקודה/מקף)
     # אנחנו מסננים הודעות צ'אט רגילות כדי שהבוט לא ינסה לנתח את "בוקר טוב"
-    if ' ' in content or len(content) > 6 or len(content) < 2:
+    # הגדלנו את האורך המקסימלי מ-6 ל-12 כדי לתמוך בטיקרים עם סיומות (כמו .TA) או קריפטו
+    if ' ' in content or len(content) > 12 or len(content) < 2:
         return
         
     # סינון תווים מיוחדים (למשל אם מישהו כתב !NVDA נוריד את ה-!)
-    ticker = ''.join(c for c in content if c.isalnum() or c in ['-', '.'])
+    # הוספנו ^ כדי לתמוך במדדים (כמו ^TA35)
+    ticker = ''.join(c for c in content if c.isalnum() or c in ['-', '.', '^'])
     
     if not ticker:
         return
