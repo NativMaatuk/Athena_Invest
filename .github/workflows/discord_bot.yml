@@ -1,0 +1,43 @@
+name: Discord Bot
+
+on:
+  schedule:
+    # Run every 5 hours (at minute 0 past every 5th hour)
+    - cron: '0 */5 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    # Limit execution time to slightly more than the bot's internal timer
+    timeout-minutes: 310 # 5 hours and 10 minutes
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip' # Caching pip dependencies
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        # Ensure discord.py is installed even if not in requirements.txt (though it should be)
+        pip install discord.py 
+
+    - name: Run Discord Bot
+      env:
+        # Load secrets from repository settings
+        DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        DISCORD_CHANNEL_ID: ${{ secrets.DISCORD_CHANNEL_ID }}
+        # Internal timeout for the script (in hours)
+        # Should be slightly less than the cron interval to allow for spin-up time
+        RUN_DURATION_HOURS: 4.98 # 4 hours and 58 minutes
+        # Add other environment variables if needed
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }} 
+        WEBHOOK_URL: ${{ secrets.WEBHOOK_URL }} # Keep existing webhooks valid if used by code
+      run: |
+        python discord_bot.py
