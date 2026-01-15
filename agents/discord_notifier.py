@@ -3,6 +3,7 @@ import time
 import math
 import io
 import json
+import pandas as pd
 from typing import List, Dict, Optional
 from config import WEBHOOK_URL
 from datetime import datetime
@@ -14,6 +15,7 @@ try:
     import matplotlib
     matplotlib.use('Agg') # Use non-interactive backend
     import matplotlib.pyplot as plt
+    import matplotlib.dates as mdates
     import numpy as np
     from matplotlib.patches import Wedge
     try:
@@ -254,34 +256,338 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
         
         return embed
 
+    def _generate_chart_image(self, df: pd.DataFrame, ticker: str, is_positive: bool) -> Optional[io.BytesIO]:
+        """
+        Generates a professional price chart with SMA 150, BBands, Volume and RSI.
+        """
+        if not HAS_MATPLOTLIB or df is None or df.empty:
+            return None
+            
+        try:
+            # Setup colors
+            discord_dark = '#2f3136'
+            text_color = '#dcddde'
+            grid_color = '#40444b'
+            price_color = '#43b581' if is_positive else '#f04747'
+            sma_color = '#faa61a' # Yellow
+            bb_color = '#7289da' # Discord Blurple for bands
+            vol_up = '#26a69a'
+            vol_down = '#ef5350'
+            
+            # Create figure with 2 subplots (Price+Vol, RSI)
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), dpi=100, sharex=True, 
+                                         gridspec_kw={'height_ratios': [3, 1], 'hspace': 0.15}) 
+            fig.patch.set_facecolor(discord_dark)
+            
+            # --- Panel 1: Price, SMA, BBands, Volume ---
+            ax1.set_facecolor(discord_dark)
+            
+            # Move Y-Axis to Right (Standard for Trading Charts)
+            ax1.yaxis.tick_right()
+            ax1.yaxis.set_label_position("right")
+            ax1.tick_params(axis='y', which='both', labelleft=False, labelright=True, left=False, right=True)
+            
+            # Prepare dates and data
+            df = df.tail(126) # Last ~6 months
+            # Create integer index for x-axis to avoid gaps
+            x_indices = np.arange(len(df))
+            dates = df.index
+            
+            # Handle index if not datetime
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'Date' in df.columns:
+                    dates = pd.to_datetime(df['Date'])
+                else:
+                    try:
+                        dates = pd.to_datetime(df.index)
+                    except:
+                        pass 
+
+            # 1. Bollinger Bands
+            if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
+                # Upper Band (Red)
+                ax1.plot(x_indices, df['BB_Upper'], color='#ef5350', linewidth=0.8, alpha=0.7, label='_nolegend_')
+                # Lower Band (Green)
+                ax1.plot(x_indices, df['BB_Lower'], color='#26a69a', linewidth=0.8, alpha=0.7, label='_nolegend_')
+                
+                # Middle Band (Moving Average) - usually SMA 20
+                if 'BB_Middle' in df.columns:
+                    ax1.plot(x_indices, df['BB_Middle'], color='#b9bbbe', linewidth=0.8, linestyle='-.', alpha=0.6, label='_nolegend_')
+
+                ax1.fill_between(x_indices, df['BB_Upper'], df['BB_Lower'], color=bb_color, alpha=0.05)
+
+            # 2. Candles
+            # Create boolean mask for up/down days
+            up = df['Close'] >= df['Open']
+            down = df['Close'] < df['Open']
+            
+            col_up = '#26a69a' 
+            col_down = '#ef5350'
+            
+            # Wicks
+            width = 0.6
+            width2 = 0.08
+            ax1.vlines(x_indices[up], df['Low'][up], df['High'][up], color=col_up, linewidth=1, zorder=3)
+            ax1.vlines(x_indices[down], df['Low'][down], df['High'][down], color=col_down, linewidth=1, zorder=3)
+            
+            # Bodies
+            ax1.bar(x_indices[up], df['Close'][up] - df['Open'][up], width, bottom=df['Open'][up], color=col_up, edgecolor=col_up, linewidth=0.5, zorder=3)
+            ax1.bar(x_indices[down], df['Open'][down] - df['Close'][down], width, bottom=df['Close'][down], color=col_down, edgecolor=col_down, linewidth=0.5, zorder=3)
+            
+            # 3. SMA 150
+            if 'SMA_150' in df.columns:
+                ax1.plot(x_indices, df['SMA_150'], color=sma_color, label='SMA 150', linewidth=1.5, linestyle='--', zorder=4)
+
+            # 4. Volume (Twin Axis)
+            ax1v = ax1.twinx()
+            ax1v.bar(x_indices[up], df['Volume'][up], color=col_up, alpha=0.5, width=width)
+            ax1v.bar(x_indices[down], df['Volume'][down], color=col_down, alpha=0.5, width=width)
+            ax1v.set_ylim(0, df['Volume'].max() * 4) # Push volume to bottom 1/4
+            ax1v.axis('off') # Hide volume axis info
+
+            # Formatting Ax1
+            ax1.grid(True, color=grid_color, linestyle=':', alpha=0.4) # More subtle grid
+            ax1.tick_params(axis='y', colors=text_color, labelsize=9)
+            ax1.set_ylabel('') # Remove label to save space, numbers are enough
+            for spine in ax1.spines.values():
+                spine.set_color(text_color)
+                spine.set_alpha(0.3)
+            ax1.spines['top'].set_visible(False)
+            ax1.spines['left'].set_visible(False) # Hide left spine since ticks are on right
+            
+            # Legend Ax1
+            import matplotlib.lines as mlines
+            line_sma = mlines.Line2D([], [], color=sma_color, label='SMA 150', linewidth=1.5, linestyle='--')
+            patch_bb = mlines.Line2D([], [], color=bb_color, label='Bollinger Bands (20, 2)', linewidth=1, alpha=0.5)
+            line_ma20 = mlines.Line2D([], [], color='#b9bbbe', label='SMA 20 (Basis)', linewidth=0.8, linestyle='-.')
+            
+            ax1.legend(handles=[line_sma, patch_bb, line_ma20], facecolor=discord_dark, labelcolor=text_color, loc='upper left', frameon=False, fontsize=9)
+            
+            # Ensure Y-axis is on the right
+            ax1.yaxis.tick_right()
+            ax1.yaxis.set_label_position("right")
+            ax1.tick_params(axis='y', which='both', labelleft=False, labelright=True)
+            
+            # Add OHLC Info Box - Moved to top title area to avoid legend overlap
+            last_candle = df.iloc[-1]
+            ohlc_text = (f"O: {last_candle['Open']:.2f}  H: {last_candle['High']:.2f}  "
+                         f"L: {last_candle['Low']:.2f}  C: {last_candle['Close']:.2f}  "
+                         f"Vol: {int(last_candle['Volume']):,}")
+            
+            # Add text annotation above the plot area
+            ax1.text(0.0, 1.02, ohlc_text, transform=ax1.transAxes, color=text_color, fontsize=9, alpha=0.8)
+            
+            # Title
+            ax1.set_title(f"{ticker} - Technical Analysis (6 Months)", color='white', fontsize=16, fontweight='bold', pad=25) # Increased pad for OHLC text
+
+            # Current Price Annotation (Badge Style)
+            last_price = df['Close'].iloc[-1]
+            last_idx = x_indices[-1]
+            
+            # Use distinct color for current price
+            current_price_color = '#00e5ff' # Cyan
+            
+            # Add line pointing to price
+            ax1.axhline(y=last_price, color=current_price_color, linestyle='--', linewidth=0.8, alpha=0.5)
+            
+            # Add text with background box
+            bbox_props = dict(boxstyle="larrow,pad=0.3", fc=current_price_color, ec="none", alpha=0.8)
+            ax1.annotate(f'{last_price:.2f}', xy=(1, last_price), xycoords=('axes fraction', 'data'),
+                        xytext=(5, 0), textcoords='offset points',
+                        color='black', fontweight='bold', fontsize=10, va='center', ha='left',
+                        bbox=bbox_props)
+
+            # Bollinger Bands Annotations (Upper/Lower)
+            if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
+                # Upper Band Annotation (Red)
+                last_bb_upper = df['BB_Upper'].iloc[-1]
+                bbox_props_upper = dict(boxstyle="larrow,pad=0.3", fc='#ef5350', ec="none", alpha=0.8)
+                ax1.annotate(f'{last_bb_upper:.2f}', xy=(1, last_bb_upper), xycoords=('axes fraction', 'data'),
+                            xytext=(5, 0), textcoords='offset points',
+                            color='black', fontweight='bold', fontsize=8, va='center', ha='left',
+                            bbox=bbox_props_upper)
+                
+                # Lower Band Annotation (Green)
+                last_bb_lower = df['BB_Lower'].iloc[-1]
+                bbox_props_lower = dict(boxstyle="larrow,pad=0.3", fc='#26a69a', ec="none", alpha=0.8)
+                ax1.annotate(f'{last_bb_lower:.2f}', xy=(1, last_bb_lower), xycoords=('axes fraction', 'data'),
+                            xytext=(5, 0), textcoords='offset points',
+                            color='black', fontweight='bold', fontsize=8, va='center', ha='left',
+                            bbox=bbox_props_lower)
+            
+            # SMA 150 Annotation (Orange)
+            if 'SMA_150' in df.columns:
+                last_sma_150 = df['SMA_150'].iloc[-1]
+                if not pd.isna(last_sma_150):
+                    bbox_props_sma150 = dict(boxstyle="larrow,pad=0.3", fc=sma_color, ec="none", alpha=0.8)
+                    ax1.annotate(f'{last_sma_150:.2f}', xy=(1, last_sma_150), xycoords=('axes fraction', 'data'),
+                                xytext=(5, 0), textcoords='offset points',
+                                color='black', fontweight='bold', fontsize=8, va='center', ha='left',
+                                bbox=bbox_props_sma150)
+
+            # --- Panel 2: RSI ---
+            ax2.set_facecolor(discord_dark)
+            
+            # Move Y-Axis to Right
+            ax2.yaxis.tick_right()
+            ax2.yaxis.set_label_position("right")
+            
+            if 'RSI' in df.columns:
+                # Plot RSI Line
+                ax2.plot(x_indices, df['RSI'], color='#b9bbbe', linewidth=1.5, label='RSI')
+                
+                # Plot RSI Moving Average (14 period)
+                rsi_sma = df['RSI'].rolling(window=14).mean()
+                ax2.plot(x_indices, rsi_sma, color='#f1c40f', linewidth=1.2, label='RSI SMA 14') # Yellow
+                
+                # Overbought/Oversold Lines
+                ax2.axhline(70, color='#f04747', linestyle='--', linewidth=1, alpha=0.5)
+                ax2.axhline(30, color='#43b581', linestyle='--', linewidth=1, alpha=0.5)
+                
+                # Fill zones
+                ax2.fill_between(x_indices, df['RSI'], 70, where=(df['RSI'] >= 70), color='#f04747', alpha=0.3)
+                ax2.fill_between(x_indices, df['RSI'], 30, where=(df['RSI'] <= 30), color='#43b581', alpha=0.3)
+                ax2.set_ylim(0, 100)
+                # ax2.set_ylabel('RSI', color=text_color) # Removed label
+                
+                # RSI Legend
+                # Placed above the plot to avoid overlapping with the line
+                ax2.legend(facecolor=discord_dark, labelcolor=text_color, loc='lower left', bbox_to_anchor=(0, 1.02, 1, 0.102), mode="expand", borderaxespad=0, frameon=False, fontsize=8, ncol=2)
+                
+                # Current RSI Value Badge
+                last_rsi = df['RSI'].iloc[-1]
+                
+                # Current RSI SMA Value Badge
+                last_rsi_sma = rsi_sma.iloc[-1] if not rsi_sma.isna().iloc[-1] else None
+                
+                # Calculate offsets to prevent overlap
+                rsi_offset = 0
+                sma_offset = 0
+                
+                if last_rsi_sma is not None:
+                     diff = last_rsi - last_rsi_sma
+                     # If values are close (less than 10 units), push them apart
+                     if abs(diff) < 10:
+                         if diff >= 0: # RSI >= SMA
+                             rsi_offset = 8
+                             sma_offset = -8
+                         else: # RSI < SMA
+                             rsi_offset = -8
+                             sma_offset = 8
+                
+                bbox_props_rsi = dict(boxstyle="larrow,pad=0.3", fc='#b9bbbe', ec="none", alpha=0.8)
+                ax2.annotate(f'{last_rsi:.1f}', xy=(1, last_rsi), xycoords=('axes fraction', 'data'),
+                            xytext=(5, rsi_offset), textcoords='offset points',
+                            color='black', fontweight='bold', fontsize=9, va='center', ha='left',
+                            bbox=bbox_props_rsi)
+                
+                if last_rsi_sma is not None:
+                    bbox_props_sma = dict(boxstyle="larrow,pad=0.3", fc='#f1c40f', ec="none", alpha=0.8)
+                    ax2.annotate(f'{last_rsi_sma:.1f}', xy=(1, last_rsi_sma), xycoords=('axes fraction', 'data'),
+                                xytext=(5, sma_offset), textcoords='offset points',
+                                color='black', fontweight='bold', fontsize=9, va='center', ha='left',
+                                bbox=bbox_props_sma)
+            
+            # Formatting Ax2
+            ax2.grid(True, color=grid_color, linestyle=':', alpha=0.4)
+            ax2.tick_params(axis='x', colors=text_color, labelsize=9)
+            ax2.tick_params(axis='y', colors=text_color, labelsize=8)
+            ax2.set_ylabel('') # Remove label
+            for spine in ax2.spines.values():
+                spine.set_color(text_color)
+                spine.set_alpha(0.3)
+            ax2.spines['top'].set_visible(False)
+            ax2.spines['left'].set_visible(False) # Hide left spine
+            
+            # X-Axis Formatting
+            tick_indices = np.linspace(0, len(x_indices) - 1, 8, dtype=int)
+            ax2.set_xticks(tick_indices)
+            
+            tick_labels = []
+            if isinstance(dates, pd.DatetimeIndex):
+                 tick_labels = [dates[i].strftime('%d-%b') for i in tick_indices]
+            else:
+                 try:
+                     # Use iloc for positional access if available (e.g. Series), otherwise index
+                     def get_val(pos):
+                         if hasattr(dates, 'iloc'):
+                             return dates.iloc[pos]
+                         return dates[pos]
+                         
+                     tick_labels = [pd.to_datetime(get_val(i)).strftime('%d-%b') for i in tick_indices]
+                 except:
+                     def get_val_fallback(pos):
+                         if hasattr(dates, 'iloc'):
+                             return dates.iloc[pos]
+                         return dates[pos]
+                     tick_labels = [str(get_val_fallback(i))[:5] for i in tick_indices]
+            
+            ax2.set_xticklabels(tick_labels, rotation=45, ha='right')
+            
+            # Watermark
+            fig.text(0.5, 0.5, ticker, fontsize=100, color='white', 
+                     ha='center', va='center', alpha=0.08, rotation=0, weight='bold')
+
+            # Adjust layout
+            # plt.tight_layout() # Usually good but with custom gridspec sometimes tricky
+            plt.subplots_adjust(bottom=0.15, right=0.95, top=0.92, hspace=0.15)
+            
+            # Output
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor=discord_dark)
+            plt.close(fig)
+            return buf
+            
+        except Exception as e:
+            print(f"Error generating chart for {ticker}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     def send_analysis_message(self, ticker: str, content: str, is_positive: bool, 
                               sector: str = None, industry: str = None, summary: str = None, 
                               market_cap: str = None, webhook_url: Optional[str] = None,
-                              earnings_info: str = None) -> bool:
+                              earnings_info: str = None, image_buffer: Optional[io.BytesIO] = None) -> bool:
         """
-        Sends the analysis as a structured Discord Embed.
+        Sends the analysis as a structured Discord Embed, optionally with a chart image.
         """
         # Create the embed
         embed = self._create_analysis_embed(ticker, content, is_positive, sector, industry, summary, market_cap, earnings_info)
         
-        # DEBUG: Print JSON for verification
-        # print(f"\n🔍 Generated JSON for {ticker}:")
-        # print(json.dumps(embed, indent=2, ensure_ascii=False))
-        # print("-" * 50)
-
         target_url = webhook_url or self.webhook_url
         if not target_url:
              print(f"Error: No webhook URL configured for {ticker} (Sector: {sector})")
              return False
 
         try:
-            response = requests.post(
-                target_url,
-                json={
+            if image_buffer:
+                # Prepare image for sending
+                image_buffer.seek(0)
+                files = {
+                    'file': ('chart.png', image_buffer, 'image/png')
+                }
+                # Update embed to use attachment
+                embed["image"] = {"url": "attachment://chart.png"}
+                
+                payload = {
                     "embeds": [embed]
-                },
-                headers={"Content-Type": "application/json"}
-            )
+                }
+                
+                response = requests.post(
+                    target_url,
+                    data={'payload_json': json.dumps(payload)},
+                    files=files
+                )
+            else:
+                # Standard JSON send
+                response = requests.post(
+                    target_url,
+                    json={
+                        "embeds": [embed]
+                    },
+                    headers={"Content-Type": "application/json"}
+                )
+                
             response.raise_for_status()
             time.sleep(2.0) # Slight delay
             return True
@@ -385,6 +691,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             summary = item.get('summary')
             market_cap = item.get('market_cap')
             webhook_url = item.get('webhook_url') # Allow overriding per item
+            df = item.get('df')  # Extract df
             
             # Extract Earnings Info specifically
             earnings_days = analysis_data.get('days_until_earnings')
@@ -398,9 +705,14 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             # Determine color/positive
             is_positive = analysis_data.get('is_positive', False)
             
+            # Generate Chart
+            image_buffer = None
+            if df is not None:
+                image_buffer = self._generate_chart_image(df, ticker, is_positive)
+            
             if not self.send_analysis_message(ticker=ticker, content=output, is_positive=is_positive,
                                               sector=sector, industry=industry, summary=summary, market_cap=market_cap, webhook_url=webhook_url,
-                                              earnings_info=earnings_info_str):
+                                              earnings_info=earnings_info_str, image_buffer=image_buffer):
                 overall_success = False
         
         return overall_success

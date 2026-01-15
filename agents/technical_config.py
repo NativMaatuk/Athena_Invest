@@ -4,7 +4,7 @@ Configuration settings for the technical analysis agent.
 """
 
 # Data fetching settings
-HISTORICAL_PERIOD = "1y"  # Historical data period (1 year - needed for SMA_150 which requires 150 data points)
+HISTORICAL_PERIOD = "2y"  # Historical data period (2 years - to ensure full 1y SMA line)
 INTERVAL = "1d"  # Data interval (daily)
 
 # Indicator periods

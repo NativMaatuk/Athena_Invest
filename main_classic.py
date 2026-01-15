@@ -102,7 +102,8 @@ def main():
                     'industry': hebrew_industry, # Send Hebrew industry to Discord
                     'summary': summary,
                     'market_cap': market_cap,
-                    'webhook_url': webhook_url
+                    'webhook_url': webhook_url,
+                    'df': df
                 })
             
         except Exception as e:

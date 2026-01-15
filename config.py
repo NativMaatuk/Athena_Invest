@@ -10,7 +10,6 @@ load_dotenv()
 
 # Tickers list for initial analysis
 TICKERS = ['NVDA', 'GOOGL', 'TSLA', 'AMZN', 'AAPL', 'MSFT', 'META', 'META', 'AMD', 'PLTR', 'SNDK', 'SPOT', 'INDO', 'AGIG', 'ENS', 'DXYZ', 'ORCL', 'ASTS', 'QCLS', 'LAES', 'NB', 'BTC-USD', 'ETH-USD', 'XRP-USD']
-
 # Scoring weights
 WEIGHT_TECH = 0.4  # 40% weight for technical score
 WEIGHT_FUND = 0.6  # 60% weight for fundamental score
