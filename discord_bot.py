@@ -123,11 +123,28 @@ async def on_message(message):
             earnings_info=None # הפורמטר כבר יחלץ את המידע מתוך הטקסט
         )
         
+        # יצירת הגרף (אם יש נתונים)
+        file = None
+        try:
+            image_buffer = await loop.run_in_executor(
+                None, formatter._generate_chart_image, df, ticker, analysis['is_positive']
+            )
+            
+            if image_buffer:
+                image_buffer.seek(0)
+                file = discord.File(image_buffer, filename="chart.png")
+                embed_data["image"] = {"url": "attachment://chart.png"}
+        except Exception as chart_error:
+            print(f"⚠️ Could not generate chart for {ticker}: {chart_error}")
+        
         # המרה לאובייקט של ספריית discord.py
         embed = discord.Embed.from_dict(embed_data)
         
         # שליחת התוצאה ומחיקת הודעת ההמתנה
-        await message.channel.send(embed=embed)
+        if file:
+            await message.channel.send(embed=embed, file=file)
+        else:
+            await message.channel.send(embed=embed)
         await status_msg.delete()
         print(f"✅ Analysis for {ticker} sent successfully.")
 
