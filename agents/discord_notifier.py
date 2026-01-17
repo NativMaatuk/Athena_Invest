@@ -91,7 +91,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
         # 1. Header & Title
         # Raw: "**TICKER** - 123.45$" -> Target Title: "🟢 TICKER - 123.45$"
         status_icon = "🟢" if is_positive else "🔴"
-        color = 0x2ecc71 if is_positive else 0xe74c3c
+        color = 0x089981 if is_positive else 0xf23645
         
         header_line = lines[0].replace('**', '')
         title = f"{status_icon} {header_line}"
@@ -268,11 +268,14 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             discord_dark = '#2f3136'
             text_color = '#dcddde'
             grid_color = '#40444b'
-            price_color = '#43b581' if is_positive else '#f04747'
+            
+            # Colors per user request
+            col_green = '#089981'
+            col_red = '#f23645'
+            
+            price_color = col_green if is_positive else col_red
             sma_color = '#faa61a' # Yellow
             bb_color = '#7289da' # Discord Blurple for bands
-            vol_up = '#26a69a'
-            vol_down = '#ef5350'
             
             # Create figure with 2 subplots (Price+Vol, RSI)
             fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), dpi=100, sharex=True, 
@@ -288,6 +291,10 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             ax1.tick_params(axis='y', which='both', labelleft=False, labelright=True, left=False, right=True)
             
             # Prepare dates and data
+            # Calculate Previous Close before slicing to have it for the first visible candle
+            df = df.copy()
+            df['Prev_Close'] = df['Close'].shift(1)
+            
             df = df.tail(126) # Last ~6 months
             # Create integer index for x-axis to avoid gaps
             x_indices = np.arange(len(df))
@@ -306,9 +313,9 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             # 1. Bollinger Bands
             if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
                 # Upper Band (Red)
-                ax1.plot(x_indices, df['BB_Upper'], color='#ef5350', linewidth=0.8, alpha=0.7, label='_nolegend_')
+                ax1.plot(x_indices, df['BB_Upper'], color=col_red, linewidth=0.8, alpha=0.7, label='_nolegend_')
                 # Lower Band (Green)
-                ax1.plot(x_indices, df['BB_Lower'], color='#26a69a', linewidth=0.8, alpha=0.7, label='_nolegend_')
+                ax1.plot(x_indices, df['BB_Lower'], color=col_green, linewidth=0.8, alpha=0.7, label='_nolegend_')
                 
                 # Middle Band (Moving Average) - usually SMA 20
                 if 'BB_Middle' in df.columns:
@@ -317,12 +324,15 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 ax1.fill_between(x_indices, df['BB_Upper'], df['BB_Lower'], color=bb_color, alpha=0.05)
 
             # 2. Candles
-            # Create boolean mask for up/down days
-            up = df['Close'] >= df['Open']
-            down = df['Close'] < df['Open']
+            # Create boolean mask for up/down days BASED ON PREVIOUS CLOSE
+            # Use Prev_Close (fallback to Open for first item if NaN)
+            prev_close_filled = df['Prev_Close'].fillna(df['Open'])
             
-            col_up = '#26a69a' 
-            col_down = '#ef5350'
+            up = df['Close'] >= prev_close_filled
+            down = df['Close'] < prev_close_filled
+            
+            col_up = col_green
+            col_down = col_red
             
             # Wicks
             width = 0.6
@@ -401,7 +411,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
                 # Upper Band Annotation (Red)
                 last_bb_upper = df['BB_Upper'].iloc[-1]
-                bbox_props_upper = dict(boxstyle="larrow,pad=0.3", fc='#ef5350', ec="none", alpha=0.8)
+                bbox_props_upper = dict(boxstyle="larrow,pad=0.3", fc=col_red, ec="none", alpha=0.8)
                 ax1.annotate(f'{last_bb_upper:.2f}', xy=(1, last_bb_upper), xycoords=('axes fraction', 'data'),
                             xytext=(5, 0), textcoords='offset points',
                             color='black', fontweight='bold', fontsize=8, va='center', ha='left',
@@ -409,7 +419,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 
                 # Lower Band Annotation (Green)
                 last_bb_lower = df['BB_Lower'].iloc[-1]
-                bbox_props_lower = dict(boxstyle="larrow,pad=0.3", fc='#26a69a', ec="none", alpha=0.8)
+                bbox_props_lower = dict(boxstyle="larrow,pad=0.3", fc=col_green, ec="none", alpha=0.8)
                 ax1.annotate(f'{last_bb_lower:.2f}', xy=(1, last_bb_lower), xycoords=('axes fraction', 'data'),
                             xytext=(5, 0), textcoords='offset points',
                             color='black', fontweight='bold', fontsize=8, va='center', ha='left',
@@ -441,12 +451,12 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 ax2.plot(x_indices, rsi_sma, color='#f1c40f', linewidth=1.2, label='RSI SMA 14') # Yellow
                 
                 # Overbought/Oversold Lines
-                ax2.axhline(70, color='#f04747', linestyle='--', linewidth=1, alpha=0.5)
-                ax2.axhline(30, color='#43b581', linestyle='--', linewidth=1, alpha=0.5)
+                ax2.axhline(70, color=col_red, linestyle='--', linewidth=1, alpha=0.5)
+                ax2.axhline(30, color=col_green, linestyle='--', linewidth=1, alpha=0.5)
                 
                 # Fill zones
-                ax2.fill_between(x_indices, df['RSI'], 70, where=(df['RSI'] >= 70), color='#f04747', alpha=0.3)
-                ax2.fill_between(x_indices, df['RSI'], 30, where=(df['RSI'] <= 30), color='#43b581', alpha=0.3)
+                ax2.fill_between(x_indices, df['RSI'], 70, where=(df['RSI'] >= 70), color=col_red, alpha=0.3)
+                ax2.fill_between(x_indices, df['RSI'], 30, where=(df['RSI'] <= 30), color=col_green, alpha=0.3)
                 ax2.set_ylim(0, 100)
                 # ax2.set_ylabel('RSI', color=text_color) # Removed label
                 
