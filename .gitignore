@@ -1,3 +1,5 @@
 # WEBHOOK URLs
 .env
 *.env
+__pycache__/
+*.pyc

@@ -77,6 +77,32 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
         quoted_lines = [f"> {line}" for line in lines]
         return "\n".join(quoted_lines)
 
+    def create_analysis_embed(
+        self,
+        ticker: str,
+        content: str,
+        is_positive: bool,
+        sector: str = None,
+        industry: str = None,
+        summary: str = None,
+        market_cap: str = None,
+        earnings_info: str = None,
+    ) -> Dict:
+        """
+        Public wrapper for embed creation.
+        Keeps backward compatibility while avoiding external private method usage.
+        """
+        return self._create_analysis_embed(
+            ticker=ticker,
+            content=content,
+            is_positive=is_positive,
+            sector=sector,
+            industry=industry,
+            summary=summary,
+            market_cap=market_cap,
+            earnings_info=earnings_info,
+        )
+
     def _create_analysis_embed(self, ticker: str, content: str, is_positive: bool,
                              sector: str = None, industry: str = None, summary: str = None, 
                              market_cap: str = None, earnings_info: str = None) -> Dict:
@@ -553,6 +579,10 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             import traceback
             traceback.print_exc()
             return None
+
+    def generate_chart_image(self, df: pd.DataFrame, ticker: str, is_positive: bool) -> Optional[io.BytesIO]:
+        """Public wrapper for chart generation."""
+        return self._generate_chart_image(df=df, ticker=ticker, is_positive=is_positive)
 
     def send_analysis_message(self, ticker: str, content: str, is_positive: bool, 
                               sector: str = None, industry: str = None, summary: str = None, 

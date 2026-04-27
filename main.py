@@ -1,6 +1,7 @@
 """
 AthenaInvest - Main Entry Point
 """
+import warnings
 import pandas as pd
 from agents import TechnicalAnalyzer
 from config import TICKERS
@@ -8,6 +9,12 @@ from config import TICKERS
 
 def main():
     """Run technical analysis on configured tickers."""
+    warnings.warn(
+        "main.py is legacy and kept for backward compatibility. "
+        "Use discord_bot.py for production runtime.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     analyzer = TechnicalAnalyzer()
     
     print("=" * 70)
