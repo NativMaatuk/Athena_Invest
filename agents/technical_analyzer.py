@@ -2,6 +2,7 @@
 Technical Analyzer
 Handles technical analysis using indicators and scoring.
 """
+import warnings
 import yfinance as yf
 import pandas as pd
 import talib
@@ -38,6 +39,13 @@ class TechnicalAnalyzer:
     """
     Technical analysis agent that calculates indicators and scores.
     """
+
+    def __init__(self):
+        warnings.warn(
+            "TechnicalAnalyzer is legacy. Prefer ClassicAnalyzer-based runtime in src/app/bot.py.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
     
     def analyze(self, ticker: str) -> pd.DataFrame:
         """

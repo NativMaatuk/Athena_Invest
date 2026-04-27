@@ -7,7 +7,14 @@ import pandas as pd
 import talib
 from typing import Dict, Optional, Tuple
 from datetime import datetime
-from .technical_config import HISTORICAL_PERIOD, INTERVAL, SMA_PERIOD
+from .technical_config import (
+    HISTORICAL_PERIOD, 
+    INTERVAL, 
+    SMA_PERIOD,
+    RSI_PERIOD,
+    BBANDS_PERIOD,
+    BBANDS_STD_DEV
+)
 from .classic_config import (
     ATR_PERIOD,
     RESISTANCE_LOOKBACK,
@@ -82,8 +89,20 @@ class ClassicAnalyzer:
         # Average True Range
         df['ATR'] = talib.ATR(df['High'].values, df['Low'].values, df['Close'].values, timeperiod=ATR_PERIOD)
         
+        # Bollinger Bands
+        df['BB_Upper'], df['BB_Middle'], df['BB_Lower'] = talib.BBANDS(
+            df['Close'].values, 
+            timeperiod=BBANDS_PERIOD,
+            nbdevup=BBANDS_STD_DEV,
+            nbdevdn=BBANDS_STD_DEV,
+            matype=0
+        )
+        
+        # RSI
+        df['RSI'] = talib.RSI(df['Close'].values, timeperiod=RSI_PERIOD)
+        
         # Return at least the last 30 rows (for resistance calculation) and earnings info
-        return df.tail(max(30, RESISTANCE_LOOKBACK)), days_until_earnings, next_earnings_date
+        return df, days_until_earnings, next_earnings_date
     
     def analyze_classic(self, df: pd.DataFrame, days_until_earnings: Optional[int] = None, next_earnings_date: Optional[datetime] = None) -> Dict:
         """
