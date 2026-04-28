@@ -17,6 +17,7 @@ from src.infrastructure.cache.cache_store import TTLCache
 from src.infrastructure.clients.translation_client import TranslationTickerInfoClient
 from src.infrastructure.clients.yfinance_client import YFinanceMarketDataClient
 from src.infrastructure.discord.discord_publisher import DiscordPublisher
+from src.presentation.error_messages import build_analysis_error_message
 from src.presentation.message_parser import extract_ticker_from_message
 from src.presentation.response_formatter import ResponseFormatter
 from src.shared.config import Settings
@@ -153,7 +154,7 @@ class BotApp:
                 self._error_streak += 1
                 await self._publisher.update_status_error(
                     request.status_message,
-                    f"❌ שגיאה בניתוח **{request.ticker}**: אירעה תקלה פנימית.",
+                    build_analysis_error_message(request.ticker, exc),
                 )
                 logger.error(
                     "analysis_failed "

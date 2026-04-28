@@ -1,12 +1,14 @@
 import asyncio
 import time
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 from src.infrastructure.cache.cache_store import TTLCache
-from src.infrastructure.clients.translation_client import TranslationTickerInfoClient
-from src.infrastructure.clients.yfinance_client import YFinanceMarketDataClient
-from src.presentation.response_formatter import ResponseFormatter
-from src.shared.errors import ExternalServiceError, RequestTimeoutError
+from src.shared.errors import (
+    ExternalServiceError,
+    RequestTimeoutError,
+    TickerNotFoundError,
+)
 
 
 @dataclass
@@ -18,14 +20,35 @@ class AnalysisResult:
     df: object
 
 
+@runtime_checkable
+class MarketDataClientProtocol(Protocol):
+    def fetch_analysis_dataframe(self, ticker: str):
+        ...
+
+    def build_analysis(self, df, days_until_earnings, next_earnings_date):
+        ...
+
+
+@runtime_checkable
+class TickerInfoClientProtocol(Protocol):
+    def get_ticker_info(self, ticker: str) -> dict:
+        ...
+
+
+@runtime_checkable
+class ResponseFormatterProtocol(Protocol):
+    def format_analysis(self, ticker: str, analysis: dict) -> str:
+        ...
+
+
 class AnalysisService:
     """Orchestrates ticker analysis with timeout, retry, cache and dedup."""
 
     def __init__(
         self,
-        market_data_client: YFinanceMarketDataClient,
-        ticker_info_client: TranslationTickerInfoClient,
-        formatter: ResponseFormatter,
+        market_data_client: MarketDataClientProtocol,
+        ticker_info_client: TickerInfoClientProtocol,
+        formatter: ResponseFormatterProtocol,
         request_timeout_seconds: int,
         retry_attempts: int,
         analysis_cache: TTLCache[AnalysisResult],
@@ -68,7 +91,16 @@ class AnalysisService:
             self._market_data_client.fetch_analysis_dataframe, ticker
         )
 
-        analysis = self._market_data_client.build_analysis(df, days_until_earnings, next_earnings_date)
+        try:
+            analysis = self._market_data_client.build_analysis(
+                df, days_until_earnings, next_earnings_date
+            )
+        except Exception as exc:  # noqa: BLE001
+            if self._is_missing_ticker_error(exc):
+                raise TickerNotFoundError(
+                    f"Ticker '{ticker}' could not be found."
+                ) from exc
+            raise
         analysis["ticker"] = ticker
         output_text = self._formatter.format_analysis(ticker, analysis)
 
@@ -99,6 +131,10 @@ class AnalysisService:
                     f"Timeout after {self._request_timeout_seconds}s for {func.__name__}"
                 )
             except Exception as exc:  # noqa: BLE001
+                if self._is_missing_ticker_error(exc):
+                    raise TickerNotFoundError(
+                        f"Ticker '{args[0] if args else ''}' could not be found."
+                    ) from exc
                 last_error = ExternalServiceError(f"{func.__name__} failed: {exc}")
 
             if attempt < self._retry_attempts:
@@ -107,3 +143,18 @@ class AnalysisService:
                 await asyncio.sleep(backoff)
 
         raise last_error or ExternalServiceError(f"{func.__name__} failed without error")
+
+    @staticmethod
+    def _is_missing_ticker_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        signals = (
+            "quote not found",
+            "no data found",
+            "symbol may be delisted",
+            "possibly delisted",
+            "insufficient data points: 0",
+            "dataframe is empty",
+            "ticker is empty",
+            "ticker format is invalid",
+        )
+        return any(signal in text for signal in signals)

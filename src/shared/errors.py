@@ -12,3 +12,7 @@ class ExternalServiceError(AthenaError):
 
 class RequestTimeoutError(ExternalServiceError):
     """Raised when an external request times out."""
+
+
+class TickerNotFoundError(ValidationError):
+    """Raised when ticker symbol cannot be found by market providers."""
