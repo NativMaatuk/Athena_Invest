@@ -8,6 +8,9 @@ from typing import List, Dict, Optional
 from config import WEBHOOK_URL
 from datetime import datetime
 
+DISCORD_NO_MENTIONS = {"parse": []}
+DISCORD_SUPPRESS_NOTIFICATIONS = 4096
+
 # print("DEBUG: Loading agents/discord_notifier.py...")
 
 # Lazy import matplotlib to avoid hard dependency at module level if not installed
@@ -51,7 +54,11 @@ class BaseDiscordNotifier:
         try:
             response = requests.post(
                 target_url,
-                json={"content": content},
+                json={
+                    "content": content,
+                    "allowed_mentions": DISCORD_NO_MENTIONS,
+                    "flags": DISCORD_SUPPRESS_NOTIFICATIONS,
+                },
                 headers={"Content-Type": "application/json"}
             )
             response.raise_for_status()
@@ -610,7 +617,9 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 embed["image"] = {"url": "attachment://chart.png"}
                 
                 payload = {
-                    "embeds": [embed]
+                    "embeds": [embed],
+                    "allowed_mentions": DISCORD_NO_MENTIONS,
+                    "flags": DISCORD_SUPPRESS_NOTIFICATIONS,
                 }
                 
                 response = requests.post(
@@ -623,7 +632,9 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 response = requests.post(
                     target_url,
                     json={
-                        "embeds": [embed]
+                        "embeds": [embed],
+                        "allowed_mentions": DISCORD_NO_MENTIONS,
+                        "flags": DISCORD_SUPPRESS_NOTIFICATIONS,
                     },
                     headers={"Content-Type": "application/json"}
                 )
@@ -812,7 +823,9 @@ class FearAndGreedNotifier(BaseDiscordNotifier):
                 
                 payload = {
                     # "content": message_content, # Optional if we have embed
-                    "embeds": [embed]
+                    "embeds": [embed],
+                    "allowed_mentions": DISCORD_NO_MENTIONS,
+                    "flags": DISCORD_SUPPRESS_NOTIFICATIONS,
                 }
                 
                 response = requests.post(
@@ -841,7 +854,11 @@ class FearAndGreedNotifier(BaseDiscordNotifier):
             try:
                 response = requests.post(
                     target_url,
-                    json={"content": message},
+                    json={
+                        "content": message,
+                        "allowed_mentions": DISCORD_NO_MENTIONS,
+                        "flags": DISCORD_SUPPRESS_NOTIFICATIONS,
+                    },
                     headers={"Content-Type": "application/json"}
                 )
                 response.raise_for_status()

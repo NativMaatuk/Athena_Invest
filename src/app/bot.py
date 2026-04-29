@@ -44,7 +44,11 @@ class BotApp:
 
         intents = discord.Intents.default()
         intents.message_content = True
-        self.bot = commands.Bot(command_prefix="!", intents=intents)
+        self.bot = commands.Bot(
+            command_prefix="!",
+            intents=intents,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
         self._request_guard = RequestGuard(settings.user_cooldown_seconds)
         self._request_queue: asyncio.Queue[AnalysisRequest] = asyncio.Queue(
@@ -73,6 +77,18 @@ class BotApp:
         self._bind_events()
 
     def _bind_events(self) -> None:
+        async def send_quiet(channel: discord.abc.Messageable, content: str):
+            kwargs = {
+                "content": content,
+                "allowed_mentions": discord.AllowedMentions.none(),
+                "silent": True,
+            }
+            try:
+                return await channel.send(**kwargs)
+            except TypeError:
+                kwargs.pop("silent", None)
+                return await channel.send(**kwargs)
+
         @self.bot.event
         async def on_ready():
             logger.info(f"bot_ready user={self.bot.user}")
@@ -99,15 +115,11 @@ class BotApp:
 
             allowed, remaining = self._request_guard.can_process(message.author.id)
             if not allowed:
-                await message.channel.send(
-                    f"⏱️ נא להמתין {remaining} שניות לפני בקשה נוספת."
-                )
+                await send_quiet(message.channel, f"⏱️ נא להמתין {remaining} שניות לפני בקשה נוספת.")
                 return
 
             if self._request_queue.full():
-                await message.channel.send(
-                    "⚠️ המערכת כרגע בעומס גבוה. נסה שוב בעוד דקה."
-                )
+                await send_quiet(message.channel, "⚠️ המערכת כרגע בעומס גבוה. נסה שוב בעוד דקה.")
                 return
 
             status_message = await self._publisher.send_processing(message.channel, ticker)

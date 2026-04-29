@@ -10,8 +10,24 @@ class DiscordPublisher:
     def __init__(self, formatter: DiscordNotifier):
         self._formatter = formatter
 
+    async def _send_quiet(self, channel: discord.abc.Messageable, **kwargs):
+        """
+        Send a message with strict mention suppression and best-effort silent delivery.
+        Falls back if the installed discord.py version does not support `silent`.
+        """
+        safe_kwargs = {
+            **kwargs,
+            "allowed_mentions": discord.AllowedMentions.none(),
+            "silent": True,
+        }
+        try:
+            return await channel.send(**safe_kwargs)
+        except TypeError:
+            safe_kwargs.pop("silent", None)
+            return await channel.send(**safe_kwargs)
+
     async def send_processing(self, channel: discord.abc.Messageable, ticker: str):
-        return await channel.send(f"⏳ מנתח את **{ticker}**... אנא המתן.")
+        return await self._send_quiet(channel, content=f"⏳ מנתח את **{ticker}**... אנא המתן.")
 
     async def send_analysis(self, channel: discord.abc.Messageable, result) -> None:
         info = result.info or {}
@@ -42,9 +58,9 @@ class DiscordPublisher:
 
         embed = discord.Embed.from_dict(embed_data)
         if file:
-            await channel.send(embed=embed, file=file)
+            await self._send_quiet(channel, embed=embed, file=file)
             return
-        await channel.send(embed=embed)
+        await self._send_quiet(channel, embed=embed)
 
     async def update_status_error(self, status_message: discord.Message, content: str) -> None:
         await status_message.edit(content=content)
