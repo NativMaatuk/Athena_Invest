@@ -110,6 +110,125 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             earnings_info=earnings_info,
         )
 
+    def create_ownership_embed(
+        self,
+        ticker: str,
+        ownership: Dict,
+        is_positive: bool,
+    ) -> Dict:
+        """Build a dedicated embed for institutional ownership details."""
+        color = 0x089981 if is_positive else 0xf23645
+        fields = []
+
+        ownership_lines = []
+        institutional_pct = ownership.get("institutional_pct")
+        insider_pct = ownership.get("insider_pct")
+        if isinstance(institutional_pct, (int, float)):
+            ownership_lines.append(f"החזקת מוסדיים: {institutional_pct:.2f}%")
+        if isinstance(insider_pct, (int, float)):
+            ownership_lines.append(f"החזקת אינסיידרים: {insider_pct:.2f}%")
+        if ownership_lines:
+            fields.append({
+                "name": "בעלות כללית",
+                "value": self._bidi_safe("\n".join(ownership_lines)),
+                "inline": False,
+            })
+
+        top_holders = ownership.get("top_holders") or []
+        if top_holders:
+            holder_lines = []
+            for holder in top_holders[:5]:
+                name = holder.get("name", "Unknown")
+                details = []
+                if holder.get("pct_out"):
+                    details.append(holder["pct_out"])
+                if holder.get("shares"):
+                    details.append(f"Shares {holder['shares']}")
+                elif holder.get("value"):
+                    details.append(f"Value {holder['value']}")
+                details_text = " | ".join(details) if details else "Data N/A"
+                holder_lines.append(f"{name} - {details_text}")
+            fields.append({
+                "name": "מחזיקים מובילים",
+                "value": self._bidi_safe("\n".join(holder_lines)),
+                "inline": False,
+            })
+
+        return {
+            "title": f"🏦 {ticker} - בעלות מוסדית",
+            "color": color,
+            "fields": fields,
+            "timestamp": datetime.now().astimezone().isoformat(),
+            "footer": {"text": "Athena Invest Analysis | מצב: בעלות מוסדית"},
+        }
+
+    def create_gap_focus_embed(
+        self,
+        ticker: str,
+        analysis: Dict,
+        is_positive: bool,
+    ) -> Dict:
+        """Build a dedicated embed that contains only gap-relevant information."""
+        color = 0x089981 if is_positive else 0xf23645
+        fields = []
+
+        summary = analysis.get("gap_summary") or {}
+        open_count = int(summary.get("open_count", 0) or 0)
+        up_count = int(summary.get("up_count", 0) or 0)
+        down_count = int(summary.get("down_count", 0) or 0)
+        fields.append(
+            {
+                "name": "מצב גאפים",
+                "value": self._bidi_safe(
+                    f"פתוחים: {open_count}\nGap Up: {up_count}\nGap Down: {down_count}"
+                ),
+                "inline": False,
+            }
+        )
+
+        nearest_gap = analysis.get("nearest_open_gap")
+        if nearest_gap:
+            direction_text = "Gap Up" if nearest_gap.get("direction") == "up" else "Gap Down"
+            status_text = "חלקית" if nearest_gap.get("fill_status") == "partial" else "פתוח"
+            zone_low = nearest_gap.get("zone_low")
+            zone_high = nearest_gap.get("zone_high")
+            gap_date = nearest_gap.get("gap_date")
+            if isinstance(gap_date, (pd.Timestamp, datetime)):
+                gap_date_text = gap_date.strftime("%d.%m.%Y")
+            else:
+                gap_date_text = str(gap_date) if gap_date else "N/A"
+
+            details = [f"{direction_text} ({status_text})", f"תאריך: {gap_date_text}"]
+            if isinstance(zone_low, (int, float)) and isinstance(zone_high, (int, float)):
+                details.append(f"טווח: {zone_low:,.2f}$ - {zone_high:,.2f}$")
+            distance = nearest_gap.get("distance_from_current_pct")
+            if isinstance(distance, (int, float)):
+                details.append(f"מרחק מהמחיר: {distance:.2f}%")
+
+            fields.append(
+                {
+                    "name": "גאפ קרוב",
+                    "value": self._bidi_safe("\n".join(details)),
+                    "inline": False,
+                }
+            )
+        else:
+            fields.append(
+                {
+                    "name": "גאפ קרוב",
+                    "value": self._bidi_safe("אין גאפים פתוחים כרגע."),
+                    "inline": False,
+                }
+            )
+
+        return {
+            "title": f"🕳️ {ticker} - ניתוח גאפים",
+            "color": color,
+            "fields": fields,
+            "timestamp": datetime.now().astimezone().isoformat(),
+            "footer": {"text": "Athena Invest Analysis | מצב: גאפים בלבד"},
+        }
+
     def _create_analysis_embed(self, ticker: str, content: str, is_positive: bool,
                              sector: str = None, industry: str = None, summary: str = None, 
                              market_cap: str = None, earnings_info: str = None) -> Dict:
@@ -135,6 +254,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             "signal": None,
             "status": [],
             "risk": None,
+            "gaps": [],
             "strategy": [],
             "summary_text": None
         }
@@ -165,6 +285,12 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             # Risk
             if "רמת סיכון" in line or "אזהרת סיכון" in line:
                 sections["risk"] = line
+                current_section = None
+                continue
+
+            # Open gaps info
+            if "🕳️" in line or "🧭" in line or "גאפ" in line:
+                sections["gaps"].append(line.replace("**", ""))
                 current_section = None
                 continue
                 
@@ -242,6 +368,15 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
                 "value": self._bidi_safe(sections["risk"]),
                 "inline": False
             })
+
+        # Open gaps
+        if sections["gaps"]:
+            gap_value = "\n".join([self._bidi_safe(line) for line in sections["gaps"]])
+            fields.append({
+                "name": "🕳️ גאפים",
+                "value": gap_value,
+                "inline": False
+            })
             
         # Strategy
         if sections["strategy"]:
@@ -289,13 +424,23 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
         
         return embed
 
-    def _generate_chart_image(self, df: pd.DataFrame, ticker: str, is_positive: bool) -> Optional[io.BytesIO]:
+    def _generate_chart_image(
+        self,
+        df: pd.DataFrame,
+        ticker: str,
+        is_positive: bool,
+        analysis: Optional[Dict] = None,
+        chart_mode: str = "full",
+    ) -> Optional[io.BytesIO]:
         """
         Generates a professional price chart with SMA 150, BBands, Volume and RSI.
         """
         if not HAS_MATPLOTLIB or df is None or df.empty:
             return None
-            
+
+        if chart_mode == "gaps_only":
+            return self._generate_gap_only_chart(df, ticker, is_positive, analysis or {})
+
         try:
             # Setup colors
             discord_dark = '#2f3136'
@@ -376,7 +521,7 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             # Bodies
             ax1.bar(x_indices[up], df['Close'][up] - df['Open'][up], width, bottom=df['Open'][up], color=col_up, edgecolor=col_up, linewidth=0.5, zorder=3)
             ax1.bar(x_indices[down], df['Open'][down] - df['Close'][down], width, bottom=df['Close'][down], color=col_down, edgecolor=col_down, linewidth=0.5, zorder=3)
-            
+
             # 3. SMA 150
             if 'SMA_150' in df.columns:
                 ax1.plot(x_indices, df['SMA_150'], color=sma_color, label='SMA 150', linewidth=1.5, linestyle='--', zorder=4)
@@ -587,9 +732,255 @@ class ClassicAnalysisNotifier(BaseDiscordNotifier):
             traceback.print_exc()
             return None
 
-    def generate_chart_image(self, df: pd.DataFrame, ticker: str, is_positive: bool) -> Optional[io.BytesIO]:
+    def _generate_gap_only_chart(
+        self,
+        df: pd.DataFrame,
+        ticker: str,
+        is_positive: bool,
+        analysis: Dict,
+    ) -> Optional[io.BytesIO]:
+        """Generate a focused chart that highlights open gaps only."""
+        if df is None or df.empty:
+            return None
+
+        try:
+            discord_dark = '#2f3136'
+            text_color = '#dcddde'
+            grid_color = '#40444b'
+            col_green = '#089981'
+            col_red = '#f23645'
+
+            fig, ax = plt.subplots(1, 1, figsize=(12, 6), dpi=100)
+            fig.patch.set_facecolor(discord_dark)
+            ax.set_facecolor(discord_dark)
+
+            df = df.copy()
+            df['Prev_Close'] = df['Close'].shift(1)
+            df = df.tail(126)
+
+            x_indices = np.arange(len(df))
+            dates = df.index
+
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'Date' in df.columns:
+                    dates = pd.to_datetime(df['Date'])
+                else:
+                    try:
+                        dates = pd.to_datetime(df.index)
+                    except Exception:
+                        pass
+
+            prev_close_filled = df['Prev_Close'].fillna(df['Open'])
+            up = df['Close'] >= prev_close_filled
+            down = df['Close'] < prev_close_filled
+
+            width = 0.6
+            ax.vlines(x_indices[up], df['Low'][up], df['High'][up], color=col_green, linewidth=1.0, zorder=3)
+            ax.vlines(x_indices[down], df['Low'][down], df['High'][down], color=col_red, linewidth=1.0, zorder=3)
+            ax.bar(
+                x_indices[up],
+                df['Close'][up] - df['Open'][up],
+                width,
+                bottom=df['Open'][up],
+                color=col_green,
+                edgecolor=col_green,
+                linewidth=0.5,
+                zorder=3,
+            )
+            ax.bar(
+                x_indices[down],
+                df['Open'][down] - df['Close'][down],
+                width,
+                bottom=df['Close'][down],
+                color=col_red,
+                edgecolor=col_red,
+                linewidth=0.5,
+                zorder=3,
+            )
+
+            self._plot_open_gap_zones(
+                ax=ax,
+                df=df,
+                x_indices=x_indices,
+                gaps=analysis.get("open_gaps", []),
+                up_color=col_green,
+                down_color=col_red,
+            )
+
+            last_price = df['Close'].iloc[-1]
+            ax.axhline(y=last_price, color='#00e5ff', linestyle='--', linewidth=0.8, alpha=0.5, zorder=2)
+            ax.annotate(
+                f'{last_price:.2f}',
+                xy=(1, last_price),
+                xycoords=('axes fraction', 'data'),
+                xytext=(5, 0),
+                textcoords='offset points',
+                color='black',
+                fontweight='bold',
+                fontsize=10,
+                va='center',
+                ha='left',
+                bbox=dict(boxstyle="larrow,pad=0.3", fc='#00e5ff', ec="none", alpha=0.85),
+            )
+
+            open_count = len(analysis.get("open_gaps", []))
+            ax.set_title(
+                f"{ticker} - Gap Analysis ({open_count} Open Gaps)",
+                color='white',
+                fontsize=15,
+                fontweight='bold',
+                pad=16,
+            )
+
+            if open_count == 0:
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No Open Gaps Detected",
+                    transform=ax.transAxes,
+                    ha='center',
+                    va='center',
+                    color=text_color,
+                    fontsize=14,
+                    alpha=0.8,
+                )
+
+            ax.grid(True, color=grid_color, linestyle=':', alpha=0.4)
+            ax.tick_params(axis='x', colors=text_color, labelsize=9)
+            ax.tick_params(axis='y', colors=text_color, labelsize=9)
+            ax.yaxis.tick_right()
+            ax.yaxis.set_label_position("right")
+            ax.tick_params(axis='y', which='both', labelleft=False, labelright=True)
+            ax.spines['left'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            for spine in ax.spines.values():
+                spine.set_color(text_color)
+                spine.set_alpha(0.3)
+
+            tick_indices = np.linspace(0, len(x_indices) - 1, 8, dtype=int)
+            ax.set_xticks(tick_indices)
+            if isinstance(dates, pd.DatetimeIndex):
+                tick_labels = [dates[i].strftime('%d-%b') for i in tick_indices]
+            else:
+                try:
+                    def get_val(pos):
+                        if hasattr(dates, 'iloc'):
+                            return dates.iloc[pos]
+                        return dates[pos]
+                    tick_labels = [pd.to_datetime(get_val(i)).strftime('%d-%b') for i in tick_indices]
+                except Exception:
+                    def get_val_fallback(pos):
+                        if hasattr(dates, 'iloc'):
+                            return dates.iloc[pos]
+                        return dates[pos]
+                    tick_labels = [str(get_val_fallback(i))[:5] for i in tick_indices]
+            ax.set_xticklabels(tick_labels, rotation=45, ha='right')
+
+            plt.subplots_adjust(bottom=0.16, right=0.95, top=0.90)
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight', facecolor=discord_dark)
+            plt.close(fig)
+            return buf
+        except Exception as e:
+            print(f"Error generating gap-only chart for {ticker}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def _plot_open_gap_zones(
+        self,
+        ax,
+        df: pd.DataFrame,
+        x_indices,
+        gaps: list[dict],
+        up_color: str,
+        down_color: str,
+    ) -> None:
+        """Overlay open gap zones as transparent bands with compact labels."""
+        if not gaps:
+            return
+
+        date_column = "Date" if "Date" in df.columns else None
+        date_to_index = {}
+        if date_column:
+            for i, value in enumerate(df[date_column]):
+                if pd.isna(value):
+                    continue
+                date_to_index[pd.to_datetime(value).date()] = i
+
+        for gap in gaps:
+            zone_low = gap.get("zone_low")
+            zone_high = gap.get("zone_high")
+            if zone_low is None or zone_high is None:
+                continue
+
+            direction = gap.get("direction", "up")
+            gap_date = gap.get("gap_date")
+            start_idx = 0
+            if date_to_index and gap_date is not None:
+                try:
+                    start_idx = date_to_index.get(pd.to_datetime(gap_date).date(), 0)
+                except Exception:
+                    start_idx = 0
+
+            x_slice = x_indices[start_idx:]
+            if len(x_slice) == 0:
+                continue
+
+            color = up_color if direction == "up" else down_color
+            ax.fill_between(
+                x_slice,
+                zone_low,
+                zone_high,
+                color=color,
+                alpha=0.10,
+                linewidth=0,
+                zorder=1,
+            )
+            ax.hlines(
+                [zone_low, zone_high],
+                xmin=x_slice[0],
+                xmax=x_slice[-1],
+                colors=color,
+                linestyles="dotted",
+                linewidth=0.8,
+                alpha=0.55,
+                zorder=2,
+            )
+
+            label = (
+                f"Gap {'UP' if direction == 'up' else 'DOWN'} "
+                f"{zone_low:.2f}-{zone_high:.2f}"
+            )
+            ax.text(
+                x_slice[-1],
+                (zone_low + zone_high) / 2,
+                label,
+                color=color,
+                fontsize=7,
+                va="center",
+                ha="right",
+                alpha=0.9,
+                bbox=dict(boxstyle="round,pad=0.2", fc="#1f2226", ec=color, alpha=0.6),
+                zorder=5,
+            )
+
+    def generate_chart_image(
+        self,
+        df: pd.DataFrame,
+        ticker: str,
+        is_positive: bool,
+        analysis: Optional[Dict] = None,
+        chart_mode: str = "full",
+    ) -> Optional[io.BytesIO]:
         """Public wrapper for chart generation."""
-        return self._generate_chart_image(df=df, ticker=ticker, is_positive=is_positive)
+        return self._generate_chart_image(
+            df=df,
+            ticker=ticker,
+            is_positive=is_positive,
+            analysis=analysis,
+            chart_mode=chart_mode,
+        )
 
     def send_analysis_message(self, ticker: str, content: str, is_positive: bool, 
                               sector: str = None, industry: str = None, summary: str = None, 

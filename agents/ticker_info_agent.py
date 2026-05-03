@@ -1,5 +1,6 @@
-import yfinance as yf
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
+
+import pandas as pd
 import yfinance as yf
 from config import SECTOR_HEBREW_MAP
 from deep_translator import GoogleTranslator
@@ -55,6 +56,9 @@ class TickerInfoAgent:
             result['sector_en'] = sector
             result['industry_en'] = industry
             result['market_cap'] = market_cap_str
+            ownership = self._extract_ownership_data(t, info)
+            if ownership:
+                result['ownership'] = ownership
             return result
 
         except Exception as e:
@@ -67,6 +71,90 @@ class TickerInfoAgent:
                 'industry_en': 'Unknown',
                 'market_cap': 'N/A'
             }
+
+    def _extract_ownership_data(self, ticker_obj: yf.Ticker, info: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract normalized institutional/insider ownership data when available."""
+        institutional_pct = self._normalize_ratio_to_pct(info.get('heldPercentInstitutions'))
+        insider_pct = self._normalize_ratio_to_pct(info.get('heldPercentInsiders'))
+
+        holders: list[Dict[str, str]] = []
+        try:
+            institutional_holders = ticker_obj.institutional_holders
+            if isinstance(institutional_holders, pd.DataFrame) and not institutional_holders.empty:
+                holders = self._normalize_holders(institutional_holders)
+        except Exception:
+            holders = []
+
+        if institutional_pct is None and insider_pct is None and not holders:
+            return None
+
+        result: Dict[str, Any] = {}
+        if institutional_pct is not None:
+            result['institutional_pct'] = institutional_pct
+        if insider_pct is not None:
+            result['insider_pct'] = insider_pct
+        if holders:
+            result['top_holders'] = holders
+        return result
+
+    @staticmethod
+    def _normalize_ratio_to_pct(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            numeric = float(value)
+            if numeric <= 0:
+                return None
+            if numeric <= 1:
+                return numeric * 100
+            return numeric
+        except (TypeError, ValueError):
+            return None
+
+    def _normalize_holders(self, holders_df: pd.DataFrame, max_holders: int = 5) -> list[Dict[str, str]]:
+        """Normalize holders dataframe into compact display-ready records."""
+        normalized: list[Dict[str, str]] = []
+        if holders_df is None or holders_df.empty:
+            return normalized
+
+        for _, row in holders_df.head(max_holders).iterrows():
+            holder_name = row.get('Holder')
+            if holder_name is None or str(holder_name).strip() == "":
+                continue
+
+            holder_item: Dict[str, str] = {'name': str(holder_name)}
+            shares = self._format_count(row.get('Shares'))
+            if shares:
+                holder_item['shares'] = shares
+            value = self._format_count(row.get('Value'))
+            if value:
+                holder_item['value'] = value
+
+            pct_raw = row.get('% Out')
+            pct = self._normalize_ratio_to_pct(pct_raw)
+            if pct is not None:
+                holder_item['pct_out'] = f"{pct:.2f}%"
+
+            normalized.append(holder_item)
+        return normalized
+
+    @staticmethod
+    def _format_count(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            numeric = float(value)
+            if numeric >= 1_000_000_000_000:
+                return f"{numeric / 1_000_000_000_000:.2f}T"
+            if numeric >= 1_000_000_000:
+                return f"{numeric / 1_000_000_000:.2f}B"
+            if numeric >= 1_000_000:
+                return f"{numeric / 1_000_000:.2f}M"
+            if numeric >= 1_000:
+                return f"{numeric / 1_000:.2f}K"
+            return f"{numeric:.0f}"
+        except (TypeError, ValueError):
+            return None
 
     def _format_market_cap(self, market_cap: Optional[int]) -> str:
         """Formats market cap into readable string (T, B, M)."""

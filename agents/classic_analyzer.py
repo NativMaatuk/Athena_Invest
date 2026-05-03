@@ -164,6 +164,14 @@ class ClassicAnalyzer:
         
         # Determine status
         status = self._determine_status(is_positive, sma_slope, is_extended, distance_from_sma)
+        open_gaps = self._detect_open_gaps(df, current_price)
+        nearest_open_gap = open_gaps[0] if open_gaps else None
+        gap_summary = {
+            'open_count': len(open_gaps),
+            'up_count': sum(1 for gap in open_gaps if gap['direction'] == 'up'),
+            'down_count': sum(1 for gap in open_gaps if gap['direction'] == 'down'),
+            'fill_rule': 'close'
+        }
         
         return {
             'ticker': None,  # Will be set by caller
@@ -178,6 +186,10 @@ class ClassicAnalyzer:
             'atr_pct': atr_pct,
             'atr_warning': atr_warning,
             'status': status,
+            'has_unfilled_gap': len(open_gaps) > 0,
+            'open_gaps': open_gaps,
+            'nearest_open_gap': nearest_open_gap,
+            'gap_summary': gap_summary,
             'days_until_earnings': days_until_earnings,
             'next_earnings_date': next_earnings_date
         }
@@ -266,6 +278,109 @@ class ClassicAnalyzer:
             return 'accumulation'
         else:
             return 'breakout'
+
+    def _detect_open_gaps(self, df: pd.DataFrame, current_price: float, lookback: int = 120) -> list[dict]:
+        """Detect open/partial price gaps with fill rule based on Close only."""
+        required_columns = {'High', 'Low', 'Close'}
+        if len(df) < 2 or not required_columns.issubset(df.columns):
+            return []
+
+        date_column = 'Date' if 'Date' in df.columns else ('Datetime' if 'Datetime' in df.columns else None)
+        columns_to_use = ['High', 'Low', 'Close']
+        if date_column:
+            columns_to_use.append(date_column)
+
+        data = df[columns_to_use].tail(lookback).reset_index(drop=True)
+        gaps: list[dict] = []
+
+        for idx in range(1, len(data)):
+            prev_high = data.loc[idx - 1, 'High']
+            prev_low = data.loc[idx - 1, 'Low']
+            curr_high = data.loc[idx, 'High']
+            curr_low = data.loc[idx, 'Low']
+
+            if pd.isna(prev_high) or pd.isna(prev_low) or pd.isna(curr_high) or pd.isna(curr_low):
+                continue
+
+            prev_high = float(prev_high)
+            prev_low = float(prev_low)
+            curr_high = float(curr_high)
+            curr_low = float(curr_low)
+
+            direction = None
+            zone_low = None
+            zone_high = None
+            gap_pct_base = None
+            if curr_low > prev_high:
+                direction = 'up'
+                zone_low = prev_high
+                zone_high = curr_low
+                gap_pct_base = prev_high
+            elif curr_high < prev_low:
+                direction = 'down'
+                zone_low = curr_high
+                zone_high = prev_low
+                gap_pct_base = prev_low
+
+            if direction is None or zone_low is None or zone_high is None:
+                continue
+
+            gap_size_abs = zone_high - zone_low
+            gap_size_pct = (gap_size_abs / gap_pct_base * 100) if gap_pct_base else 0.0
+
+            future_close = data.loc[idx + 1:, 'Close'].dropna()
+            future_low = data.loc[idx + 1:, 'Low'].dropna()
+            future_high = data.loc[idx + 1:, 'High'].dropna()
+            if direction == 'up':
+                close_partial = bool((future_close <= zone_high).any()) if len(future_close) else False
+                close_closed = bool((future_close <= zone_low).any()) if len(future_close) else False
+                wick_partial = bool((future_low <= zone_high).any()) if len(future_low) else False
+                wick_closed = bool((future_low <= zone_low).any()) if len(future_low) else False
+            else:
+                close_partial = bool((future_close >= zone_low).any()) if len(future_close) else False
+                close_closed = bool((future_close >= zone_high).any()) if len(future_close) else False
+                wick_partial = bool((future_high >= zone_low).any()) if len(future_high) else False
+                wick_closed = bool((future_high >= zone_high).any()) if len(future_high) else False
+
+            is_partial = close_partial or wick_partial
+            is_closed = close_closed or wick_closed
+
+            if is_closed:
+                fill_status = 'closed'
+            elif is_partial:
+                fill_status = 'partial'
+            else:
+                fill_status = 'open'
+
+            if fill_status == 'closed':
+                continue
+
+            zone_mid = (zone_low + zone_high) / 2
+            distance_from_current_pct = (
+                abs((current_price - zone_mid) / zone_mid) * 100 if zone_mid else None
+            )
+            gap_date = data.loc[idx, date_column] if date_column else None
+
+            gaps.append({
+                'direction': direction,
+                'gap_date': gap_date,
+                'zone_low': zone_low,
+                'zone_high': zone_high,
+                'gap_size_abs': gap_size_abs,
+                'gap_size_pct': gap_size_pct,
+                'fill_status': fill_status,
+                'fill_rule': 'close',
+                'distance_from_current_pct': distance_from_current_pct
+            })
+
+        gaps.sort(
+            key=lambda gap: (
+                gap['distance_from_current_pct']
+                if gap['distance_from_current_pct'] is not None
+                else float('inf')
+            )
+        )
+        return gaps
     
     def format_output(self, ticker: str, analysis: Dict) -> str:
         """
@@ -351,7 +466,7 @@ class ClassicAnalyzer:
                 lines.append(f"\u200f⚠️ אזהרת סיכון: ATR גבוה ({atr_pct:.1f}%) - תנודתיות מוגברת, להדק סטופים.")
             else:
                 lines.append(f"\u200f✅ רמת סיכון: ATR תקין ({atr_pct:.1f}%) - תנודתיות רגילה.")
-        
+
         # Instruction
         instruction = self._generate_instruction(analysis)
         lines.append(f"\u200f{instruction}")
