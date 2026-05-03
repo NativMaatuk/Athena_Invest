@@ -64,18 +64,22 @@ class AnalysisModeView(discord.ui.View):
             await interaction.response.defer()
             return
 
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+
         self._current_mode = chart_mode
         self._sync_button_styles()
         embed, file = await self.build_message_payload(chart_mode)
-        if file:
-            await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
-            return
-        await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+        await self._edit_interaction_message(interaction, embed, file)
 
     async def _show_ownership_mode(self, interaction: discord.Interaction) -> None:
         if not self._has_ownership:
             await interaction.response.defer()
             return
+
+        if not interaction.response.is_done():
+            await interaction.response.defer()
+
         self._current_mode = "ownership"
         self._sync_button_styles()
         info = self._result.info or {}
@@ -86,7 +90,25 @@ class AnalysisModeView(discord.ui.View):
             is_positive=analysis.get("is_positive", False),
         )
         embed = discord.Embed.from_dict(embed_data)
-        await interaction.response.edit_message(embed=embed, attachments=[], view=self)
+        await self._edit_interaction_message(interaction, embed, None)
+
+    async def _edit_interaction_message(
+        self,
+        interaction: discord.Interaction,
+        embed: discord.Embed,
+        file: discord.File | None,
+    ) -> None:
+        """Edit original interaction response with fallback for edge cases."""
+        attachments = [file] if file else []
+        try:
+            await interaction.edit_original_response(embed=embed, attachments=attachments, view=self)
+            return
+        except Exception:
+            # Fallback to response editor for environments with limited interaction behavior.
+            if file:
+                await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+                return
+            await interaction.response.edit_message(embed=embed, attachments=[], view=self)
 
     def _sync_button_styles(self) -> None:
         self.show_full_chart.style = (

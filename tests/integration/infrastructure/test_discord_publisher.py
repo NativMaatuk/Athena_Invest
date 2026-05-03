@@ -1,4 +1,5 @@
 import io
+import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,8 +9,9 @@ from src.infrastructure.discord.discord_publisher import AnalysisModeView, Disco
 
 
 class FakeNotifier:
-    def __init__(self, image_buffer=None):
+    def __init__(self, image_buffer=None, chart_delay_seconds=0.0):
         self.image_buffer = image_buffer
+        self.chart_delay_seconds = chart_delay_seconds
         self.embed_calls = 0
         self.last_chart_analysis = None
         self.last_chart_mode = None
@@ -25,9 +27,27 @@ class FakeNotifier:
         return {"title": "Ownership", "description": "ownership"}
 
     def generate_chart_image(self, df, ticker, is_positive, analysis=None, chart_mode="full"):
+        if self.chart_delay_seconds > 0:
+            time.sleep(self.chart_delay_seconds)
         self.last_chart_analysis = analysis
         self.last_chart_mode = chart_mode
         return self.image_buffer
+
+
+class MockInteractionResponse:
+    def __init__(self):
+        self.defer = AsyncMock()
+        self.edit_message = AsyncMock()
+        self._done = False
+
+    def is_done(self):
+        return self._done
+
+
+class MockInteraction:
+    def __init__(self):
+        self.response = MockInteractionResponse()
+        self.edit_original_response = AsyncMock()
 
 
 def make_result():
@@ -117,6 +137,48 @@ async def test_gap_mode_uses_gap_focus_embed_payload():
 
     assert embed.title == "Gap Focus"
     assert file is None
+
+
+@pytest.mark.asyncio
+async def test_switch_mode_defers_then_edits_original_response():
+    notifier = FakeNotifier(image_buffer=None)
+    view = AnalysisModeView(notifier, make_result())
+    interaction = MockInteraction()
+
+    await view._show_ownership_mode(interaction)
+
+    assert interaction.response.defer.await_count == 1
+    assert interaction.edit_original_response.await_count == 1
+
+    await view._switch_chart_mode(interaction, "full")
+
+    assert interaction.response.defer.await_count == 2
+    assert interaction.edit_original_response.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_switch_mode_handles_slow_chart_generation():
+    notifier = FakeNotifier(image_buffer=None, chart_delay_seconds=0.05)
+    view = AnalysisModeView(notifier, make_result())
+    interaction = MockInteraction()
+
+    await view._switch_chart_mode(interaction, "gaps_only")
+
+    interaction.response.defer.assert_awaited_once()
+    interaction.edit_original_response.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_switch_mode_falls_back_to_response_edit_when_original_edit_fails():
+    notifier = FakeNotifier(image_buffer=None)
+    view = AnalysisModeView(notifier, make_result())
+    interaction = MockInteraction()
+    interaction.edit_original_response = AsyncMock(side_effect=RuntimeError("edit failed"))
+
+    await view._switch_chart_mode(interaction, "gaps_only")
+
+    interaction.response.defer.assert_awaited_once()
+    interaction.response.edit_message.assert_awaited_once()
 
 
 @pytest.mark.asyncio
