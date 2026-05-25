@@ -44,6 +44,7 @@ export type ChartPoint = {
   bb_upper?: number | null;
   bb_middle?: number | null;
   bb_lower?: number | null;
+  rsi?: number | null;
 };
 
 type ApiErrorEnvelope = {

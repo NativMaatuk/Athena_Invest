@@ -92,6 +92,7 @@ def _serialize_chart_points(df, max_points: int = 260) -> list[ChartPoint]:
                 bb_upper=_safe_float(row.get("BB_Upper")),
                 bb_middle=_safe_float(row.get("BB_Middle")),
                 bb_lower=_safe_float(row.get("BB_Lower")),
+                rsi=_safe_float(row.get("RSI")),
             )
         )
     return [point for point in points if point.time]

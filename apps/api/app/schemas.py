@@ -59,6 +59,7 @@ class ChartPoint(BaseModel):
     bb_upper: float | None = None
     bb_middle: float | None = None
     bb_lower: float | None = None
+    rsi: float | None = None
 
 
 class ChartDataResponse(BaseModel):
