@@ -67,6 +67,20 @@ class ChartDataResponse(BaseModel):
     points: list[ChartPoint]
 
 
+class MarketSnapshotResponse(BaseModel):
+    updated_at_iso: str
+    updated_at_local: str
+    usd_ils: float | None = None
+    usd_ils_change_pct: float | None = None
+    fear_greed_score: float | None = None
+    fear_greed_rating: str | None = None
+    vix: float | None = None
+    vix_change_pct: float | None = None
+    spy_change_pct: float | None = None
+    qqq_change_pct: float | None = None
+    cache_ttl_seconds: int = 300
+
+
 class PerplexityChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     api_key: str = Field(min_length=10, max_length=512)

@@ -18,6 +18,7 @@ from .error_handlers import (
 from .routers.analysis import router as analysis_router
 from .routers.chat import router as chat_router
 from .routers.health import router as health_router
+from .routers.market import router as market_router
 from .routers.ticker import router as ticker_router
 
 
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.add_exception_handler(Exception, unhandled_exception_handler)
     app.add_exception_handler(HTTPException, http_exception_handler)
     app.include_router(health_router)
+    app.include_router(market_router)
     app.include_router(analysis_router)
     app.include_router(ticker_router)
     app.include_router(chat_router)

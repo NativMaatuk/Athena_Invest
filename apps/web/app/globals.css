@@ -14,3 +14,50 @@ body {
 a {
   color: inherit;
 }
+
+.market-marquee {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.market-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: market-marquee-right 24s linear infinite;
+  will-change: transform;
+}
+
+.market-marquee-group {
+  display: inline-flex;
+  align-items: center;
+  min-width: 100%;
+  gap: 1.25rem;
+  padding-inline: 0.625rem;
+}
+
+.market-marquee-group > *:not(:last-child)::after {
+  content: "•";
+  margin-inline-start: 1rem;
+  color: #64748b;
+}
+
+@keyframes market-marquee-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .market-marquee-track {
+    animation: none;
+  }
+}
+
+.ltr-number {
+  direction: ltr;
+  unicode-bidi: isolate;
+  display: inline-block;
+}

@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { InteractivePriceChart } from "@/app/components/interactive-price-chart";
 import { InfoTooltip } from "@/app/components/info-tooltip";
+import { MarketTopBar } from "@/app/components/market-top-bar";
 
 type TabKey = "overview" | "gaps" | "ownership";
 
@@ -235,6 +236,7 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-5 md:px-8 md:py-8">
+      <MarketTopBar />
       <header className="mb-6 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-lg sm:p-5 md:p-6">
         <h1 className="text-2xl font-bold tracking-tight text-cyan-300 sm:text-3xl">Athena Invest</h1>
         <p className="mt-2 text-sm text-slate-200 sm:text-base">

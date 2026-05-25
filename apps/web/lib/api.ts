@@ -47,6 +47,20 @@ export type ChartPoint = {
   rsi?: number | null;
 };
 
+export type MarketSnapshot = {
+  updated_at_iso: string;
+  updated_at_local: string;
+  usd_ils?: number | null;
+  usd_ils_change_pct?: number | null;
+  fear_greed_score?: number | null;
+  fear_greed_rating?: string | null;
+  vix?: number | null;
+  vix_change_pct?: number | null;
+  spy_change_pct?: number | null;
+  qqq_change_pct?: number | null;
+  cache_ttl_seconds?: number;
+};
+
 type ApiErrorEnvelope = {
   error?: {
     code?: string;
@@ -148,6 +162,22 @@ export async function fetchChartData(ticker: string): Promise<ChartPoint[]> {
   }
   const payload = await parseOrThrow<{ ticker: string; points: ChartPoint[] }>(response);
   return payload.points ?? [];
+}
+
+export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/market/snapshot`, {
+      method: "GET",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError(
+      "לא ניתן לטעון נתוני שוק כרגע. בדוק שה-API פעיל.",
+      "NETWORK_ERROR",
+    );
+  }
+  return parseOrThrow<MarketSnapshot>(response);
 }
 
 export async function askPerplexity(
