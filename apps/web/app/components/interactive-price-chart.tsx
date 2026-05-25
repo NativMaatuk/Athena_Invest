@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  createTextWatermark,
   createChart,
   type CandlestickData,
   type HistogramData,
@@ -27,19 +28,26 @@ type Props = {
   points: ChartPoint[];
   gaps?: Array<Record<string, unknown>>;
   mode: "full" | "gaps_only";
+  theme?: "dark" | "light";
+  ticker?: string;
 };
 
-function getChartHeight(width: number): number {
+function getChartHeight(width: number, sizeMode: "responsive" | "expanded"): number {
+  const extra = sizeMode === "expanded" ? 130 : 0;
   if (width < 480) {
-    return 320;
+    return 360 + extra;
   }
   if (width < 768) {
-    return 400;
+    return 480 + extra;
   }
   if (width < 1280) {
-    return 520;
+    return 640 + extra;
   }
-  return 620;
+  return 780 + extra;
+}
+
+function getRsiHeight(sizeMode: "responsive" | "expanded"): number {
+  return sizeMode === "expanded" ? 220 : 180;
 }
 
 function toTimestamp(dateIso: string): UTCTimestamp | null {
@@ -59,75 +67,185 @@ function toNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
+export function InteractivePriceChart({
+  points,
+  gaps = [],
+  mode,
+  theme = "dark",
+  ticker = "",
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rsiContainerRef = useRef<HTMLDivElement | null>(null);
   const rsiTooltipRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const rsiChartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [sizeMode, setSizeMode] = useState<"responsive" | "expanded">("responsive");
+
+  const exportChartImage = async () => {
+    const chart = chartRef.current;
+    if (!chart) {
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const mainCanvas = chart.takeScreenshot(true, false);
+      let finalCanvas = mainCanvas;
+
+      if (mode === "full" && rsiChartRef.current) {
+        const rsiCanvas = rsiChartRef.current.takeScreenshot(true, false);
+        const gap = 10;
+        const merged = document.createElement("canvas");
+        merged.width = Math.max(mainCanvas.width, rsiCanvas.width);
+        merged.height = mainCanvas.height + rsiCanvas.height + gap;
+        const ctx = merged.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = theme === "light" ? "#ffffff" : "#110d22";
+          ctx.fillRect(0, 0, merged.width, merged.height);
+          ctx.drawImage(mainCanvas, 0, 0);
+          ctx.drawImage(rsiCanvas, 0, mainCanvas.height + gap);
+          finalCanvas = merged;
+        }
+      }
+
+      const blob = await new Promise<Blob | null>((resolve) => finalCanvas.toBlob(resolve, "image/png"));
+      if (!blob) {
+        return;
+      }
+      const fileName = `athena-chart-${new Date().toISOString().replace(/[:.]/g, "-")}.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: "Athena chart" });
+          return;
+        } catch {
+          // Fallback to download
+        }
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!containerRef.current || points.length === 0) {
       return;
     }
 
+    const palette =
+      theme === "light"
+        ? {
+            background: "#ffffff",
+            text: "#261b44",
+            grid: "#e2def7",
+            border: "#d8cff8",
+            accent: "#7c3aed",
+            up: "#059669",
+            down: "#e11d48",
+            neutral: "#8b82b2",
+            info: "#0369a1",
+            warning: "#b45309",
+            watermark: "rgba(124, 58, 237, 0.12)",
+          }
+        : {
+            background: "#110d22",
+            text: "#d9d1ff",
+            grid: "#2a2246",
+            border: "#3a2f63",
+            accent: "#a78bfa",
+            up: "#34d399",
+            down: "#fb7185",
+            neutral: "#8f84be",
+            info: "#67e8f9",
+            warning: "#f59e0b",
+            watermark: "rgba(167, 139, 250, 0.14)",
+          };
+
     const container = containerRef.current;
+    const initialWidth = Math.max(320, container.clientWidth);
+    const initialMainHeight = getChartHeight(initialWidth, sizeMode);
+    const initialRsiHeight = getRsiHeight(sizeMode);
     const chart = createChart(container, {
-      width: container.clientWidth,
-      height: getChartHeight(container.clientWidth),
+      autoSize: true,
+      width: initialWidth,
+      height: initialMainHeight,
       layout: {
-        background: { color: "#020617" },
-        textColor: "#cbd5e1",
+        background: { color: palette.background },
+        textColor: palette.text,
       },
       grid: {
-        vertLines: { color: "#1e293b" },
-        horzLines: { color: "#1e293b" },
+        vertLines: { color: palette.grid },
+        horzLines: { color: palette.grid },
       },
       rightPriceScale: {
-        borderColor: "#334155",
+        borderColor: palette.border,
       },
       timeScale: {
-        borderColor: "#334155",
+        borderColor: palette.border,
       },
       crosshair: {
         mode: 1,
       },
     });
     chartRef.current = chart;
+    if (ticker.trim()) {
+      createTextWatermark(chart.panes()[0], {
+        horzAlign: "center",
+        vertAlign: "center",
+        lines: [
+          {
+            text: ticker.trim().toUpperCase(),
+            color: palette.watermark,
+            fontSize: initialWidth < 768 ? 44 : 72,
+            fontStyle: "bold",
+          },
+        ],
+      });
+    }
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#10b981",
-      downColor: "#ef4444",
+      upColor: palette.up,
+      downColor: palette.down,
       borderVisible: false,
-      wickUpColor: "#10b981",
-      wickDownColor: "#ef4444",
+      wickUpColor: palette.up,
+      wickDownColor: palette.down,
     });
     candleSeriesRef.current = candleSeries;
 
     const volumeSeries = chart.addSeries(HistogramSeries, {
       priceScaleId: "volume",
       priceFormat: { type: "volume" },
-      color: "#475569",
+      color: palette.neutral,
     });
     volumeSeries.priceScale().applyOptions({
       scaleMargins: { top: 0.82, bottom: 0 },
     });
 
     const smaSeries = chart.addSeries(LineSeries, {
-      color: "#f59e0b",
+      color: palette.warning,
       lineWidth: 2,
     });
     const upperBandSeries = chart.addSeries(LineSeries, {
-      color: "#ef4444",
+      color: palette.down,
       lineWidth: 1,
     });
     const middleBandSeries = chart.addSeries(LineSeries, {
-      color: "#94a3b8",
+      color: palette.neutral,
       lineWidth: 1,
     });
     const lowerBandSeries = chart.addSeries(LineSeries, {
-      color: "#22c55e",
+      color: palette.up,
       lineWidth: 1,
     });
 
@@ -154,7 +272,7 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
       volumeData.push({
         time,
         value: point.volume ?? 0,
-        color: point.close >= point.open ? "rgba(16,185,129,0.55)" : "rgba(239,68,68,0.55)",
+        color: point.close >= point.open ? "rgba(52,211,153,0.55)" : "rgba(251,113,133,0.55)",
       });
       if (point.sma_150 != null) {
         smaData.push({ time, value: point.sma_150 });
@@ -206,7 +324,7 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
         if (zoneLow == null || zoneHigh == null) {
           continue;
         }
-        const color = gap.direction === "up" ? "#10b981" : "#ef4444";
+        const color = gap.direction === "up" ? palette.up : palette.down;
         candleSeries.createPriceLine({
           price: zoneLow,
           color,
@@ -238,28 +356,30 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
       tooltipEl.textContent = `RSI(14): ${rsiValue?.toFixed(2) ?? "-"} | RSI MA(14): ${
         rsiMaValue?.toFixed(2) ?? "-"
       } | מגמה: ${trendText}`;
-      tooltipEl.style.color = !hasBoth ? "#cbd5e1" : rsiValue >= rsiMaValue ? "#34d399" : "#fb7185";
+      tooltipEl.style.color = !hasBoth ? palette.text : rsiValue >= rsiMaValue ? palette.up : palette.down;
     };
 
     let cleanupRsiCrosshair: (() => void) | null = null;
+    let cleanupRangeSync: (() => void) | null = null;
     if (mode === "full" && rsiData.length > 0 && rsiContainerRef.current) {
       const rsiChart = createChart(rsiContainerRef.current, {
-        width: rsiContainerRef.current.clientWidth,
-        height: 180,
+        autoSize: true,
+        width: Math.max(320, rsiContainerRef.current.clientWidth),
+        height: initialRsiHeight,
         layout: {
-          background: { color: "#020617" },
-          textColor: "#cbd5e1",
+          background: { color: palette.background },
+          textColor: palette.text,
         },
         grid: {
-          vertLines: { color: "#1e293b" },
-          horzLines: { color: "#1e293b" },
+          vertLines: { color: palette.grid },
+          horzLines: { color: palette.grid },
         },
         rightPriceScale: {
-          borderColor: "#334155",
+          borderColor: palette.border,
           autoScale: false,
         },
         timeScale: {
-          borderColor: "#334155",
+          borderColor: palette.border,
           timeVisible: true,
           secondsVisible: false,
         },
@@ -270,26 +390,26 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
       rsiChartRef.current = rsiChart;
 
       const rsiSeries = rsiChart.addSeries(LineSeries, {
-        color: "#b9bbbe",
+        color: palette.neutral,
         lineWidth: 2,
         lastValueVisible: true,
         priceLineVisible: false,
       });
       const rsiMaSeries = rsiChart.addSeries(LineSeries, {
-        color: "#f59e0b",
+        color: palette.warning,
         lineWidth: 2,
         lastValueVisible: true,
         priceLineVisible: false,
       });
       const upperThresholdSeries = rsiChart.addSeries(LineSeries, {
-        color: "#ef4444",
+        color: palette.down,
         lineWidth: 1,
         lineStyle: 2,
         lastValueVisible: false,
         priceLineVisible: false,
       });
       const lowerThresholdSeries = rsiChart.addSeries(LineSeries, {
-        color: "#22c55e",
+        color: palette.up,
         lineWidth: 1,
         lineStyle: 2,
         lastValueVisible: false,
@@ -333,6 +453,30 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
       };
       rsiChart.subscribeCrosshairMove(onRsiCrosshairMove);
       cleanupRsiCrosshair = () => rsiChart.unsubscribeCrosshairMove(onRsiCrosshairMove);
+
+      let syncingRange = false;
+      const syncPriceToRsi = (range: unknown) => {
+        if (!range || syncingRange) {
+          return;
+        }
+        syncingRange = true;
+        rsiChart.timeScale().setVisibleLogicalRange(range as never);
+        syncingRange = false;
+      };
+      const syncRsiToPrice = (range: unknown) => {
+        if (!range || syncingRange) {
+          return;
+        }
+        syncingRange = true;
+        chart.timeScale().setVisibleLogicalRange(range as never);
+        syncingRange = false;
+      };
+      chart.timeScale().subscribeVisibleLogicalRangeChange(syncPriceToRsi);
+      rsiChart.timeScale().subscribeVisibleLogicalRangeChange(syncRsiToPrice);
+      cleanupRangeSync = () => {
+        chart.timeScale().unsubscribeVisibleLogicalRangeChange(syncPriceToRsi);
+        rsiChart.timeScale().unsubscribeVisibleLogicalRangeChange(syncRsiToPrice);
+      };
     }
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -340,23 +484,48 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
       if (!entry || !chartRef.current) {
         return;
       }
+      const nextWidth = Math.max(320, entry.contentRect.width);
+      const nextMainHeight = getChartHeight(nextWidth, sizeMode);
       chartRef.current.applyOptions({
-        width: entry.contentRect.width,
-        height: getChartHeight(entry.contentRect.width),
+        width: nextWidth,
+        height: nextMainHeight,
       });
       if (rsiChartRef.current) {
         rsiChartRef.current.applyOptions({
-          width: entry.contentRect.width,
-          height: 180,
+          width: nextWidth,
+          height: getRsiHeight(sizeMode),
         });
       }
     });
     resizeObserver.observe(container);
 
+    const onWindowResize = () => {
+      if (!containerRef.current || !chartRef.current) {
+        return;
+      }
+      const width = Math.max(320, containerRef.current.clientWidth);
+      chartRef.current.applyOptions({
+        width,
+        height: getChartHeight(width, sizeMode),
+      });
+      if (rsiChartRef.current) {
+        rsiChartRef.current.applyOptions({
+          width,
+          height: getRsiHeight(sizeMode),
+        });
+      }
+    };
+    window.addEventListener("resize", onWindowResize);
+    onWindowResize();
+
     return () => {
+      window.removeEventListener("resize", onWindowResize);
       resizeObserver.disconnect();
       if (cleanupRsiCrosshair) {
         cleanupRsiCrosshair();
+      }
+      if (cleanupRangeSync) {
+        cleanupRangeSync();
       }
       chart.remove();
       if (rsiChartRef.current) {
@@ -366,19 +535,44 @@ export function InteractivePriceChart({ points, gaps = [], mode }: Props) {
       rsiChartRef.current = null;
       candleSeriesRef.current = null;
     };
-  }, [points, gaps, mode]);
-
+  }, [points, gaps, mode, theme, ticker, sizeMode]);
   if (points.length === 0) {
-    return <p className="text-sm text-slate-300">אין מספיק נתונים להצגת גרף.</p>;
+    return <p className="text-sm text-slate-300 athena-muted">אין מספיק נתונים להצגת גרף.</p>;
   }
 
   return (
     <div className="space-y-3">
-      <div ref={containerRef} className="w-full overflow-hidden rounded-xl border border-slate-700" />
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setSizeMode("responsive")}
+            className={`rounded px-3 py-1 text-xs athena-tab-btn ${sizeMode === "responsive" ? "athena-tab-btn-active" : ""}`}
+          >
+            Auto
+          </button>
+          <button
+            type="button"
+            onClick={() => setSizeMode("expanded")}
+            className={`rounded px-3 py-1 text-xs athena-tab-btn ${sizeMode === "expanded" ? "athena-tab-btn-active" : ""}`}
+          >
+            Expanded
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={() => void exportChartImage()}
+          disabled={isExporting}
+          className="rounded-md border border-slate-500 bg-slate-950 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-violet-400 hover:text-violet-300 disabled:cursor-not-allowed disabled:opacity-60 athena-toggle-btn"
+        >
+          {isExporting ? "מכין צילום..." : "צילום גרף"}
+        </button>
+      </div>
+      <div ref={containerRef} className="w-full overflow-hidden rounded-xl border border-slate-700 athena-subcard" />
       {mode === "full" && (
         <div className="space-y-1">
-          <div ref={rsiTooltipRef} className="text-xs text-slate-300" />
-          <div ref={rsiContainerRef} className="w-full overflow-hidden rounded-xl border border-slate-700" />
+          <div ref={rsiTooltipRef} className="text-xs text-slate-300 athena-muted" />
+          <div ref={rsiContainerRef} className="w-full overflow-hidden rounded-xl border border-slate-700 athena-subcard" />
         </div>
       )}
     </div>

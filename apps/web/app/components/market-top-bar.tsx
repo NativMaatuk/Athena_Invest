@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiClientError, MarketSnapshot, fetchMarketSnapshot } from "@/lib/api";
 
@@ -26,53 +26,55 @@ function formatPercent(value: number | null | undefined, digits = 2): string {
 
 function changeColorClass(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(value)) {
-    return "text-slate-300";
+    return "athena-muted";
   }
   if (value > 0) {
-    return "text-emerald-300";
+    return "athena-positive";
   }
   if (value < 0) {
-    return "text-rose-300";
+    return "athena-negative";
   }
-  return "text-slate-200";
+  return "athena-text";
 }
 
 function fearGreedColorClass(score: number | null | undefined, rating: string | null | undefined): string {
   if (typeof score === "number" && Number.isFinite(score)) {
     if (score <= 25) {
-      return "text-rose-300";
+      return "athena-negative";
     }
     if (score <= 45) {
-      return "text-orange-300";
+      return "athena-warning";
     }
     if (score < 55) {
-      return "text-slate-200";
+      return "athena-text";
     }
     if (score < 75) {
-      return "text-emerald-300";
+      return "athena-positive";
     }
-    return "text-lime-300";
+    return "athena-info";
   }
 
   const normalized = (rating ?? "").toLowerCase();
   if (normalized.includes("extreme fear")) {
-    return "text-rose-300";
+    return "athena-negative";
   }
   if (normalized.includes("fear")) {
-    return "text-orange-300";
+    return "athena-warning";
   }
   if (normalized.includes("extreme greed")) {
-    return "text-lime-300";
+    return "athena-info";
   }
   if (normalized.includes("greed")) {
-    return "text-emerald-300";
+    return "athena-positive";
   }
-  return "text-slate-200";
+  return "athena-text";
 }
 
 export function MarketTopBar() {
   const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
+  const marqueeGroupRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -111,9 +113,167 @@ export function MarketTopBar() {
     };
   }, []);
 
+  useEffect(() => {
+    const track = marqueeTrackRef.current;
+    const firstGroup = marqueeGroupRef.current;
+    if (!track || !firstGroup) {
+      return;
+    }
+
+    let rafId = 0;
+    let running = true;
+    let loopWidth = firstGroup.getBoundingClientRect().width;
+    let offsetX = 0;
+    let lastFrameTs = performance.now();
+    let isDragging = false;
+    let pointerId: number | null = null;
+    let lastPointerX = 0;
+    let lastPointerTs = 0;
+    let inertialVelocity = 0;
+    let reducedMotion = false;
+    const autoVelocity = -32;
+
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onReducedMotionChange = () => {
+      reducedMotion = reducedMotionQuery.matches;
+      if (reducedMotion) {
+        inertialVelocity = 0;
+      }
+    };
+    onReducedMotionChange();
+    reducedMotionQuery.addEventListener("change", onReducedMotionChange);
+
+    const normalizeOffset = () => {
+      if (loopWidth <= 0) {
+        return;
+      }
+      while (offsetX <= -loopWidth) {
+        offsetX += loopWidth;
+      }
+      while (offsetX > 0) {
+        offsetX -= loopWidth;
+      }
+    };
+
+    const draw = () => {
+      track.style.transform = `translate3d(${offsetX}px, 0, 0)`;
+    };
+
+    const recalcWidth = () => {
+      loopWidth = firstGroup.getBoundingClientRect().width;
+      normalizeOffset();
+      draw();
+    };
+
+    const groupResizeObserver = new ResizeObserver(recalcWidth);
+    groupResizeObserver.observe(firstGroup);
+    recalcWidth();
+
+    const stopDrag = () => {
+      isDragging = false;
+      pointerId = null;
+      track.classList.remove("is-dragging");
+      if (reducedMotion) {
+        inertialVelocity = 0;
+      }
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      event.preventDefault();
+      pointerId = event.pointerId;
+      isDragging = true;
+      inertialVelocity = 0;
+      lastPointerX = event.clientX;
+      lastPointerTs = performance.now();
+      track.classList.add("is-dragging");
+      track.setPointerCapture(event.pointerId);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (!isDragging || pointerId !== event.pointerId) {
+        return;
+      }
+      const now = performance.now();
+      const deltaX = event.clientX - lastPointerX;
+      const deltaT = Math.max(8, now - lastPointerTs);
+      offsetX += deltaX;
+      inertialVelocity = (deltaX / deltaT) * 1000;
+      lastPointerX = event.clientX;
+      lastPointerTs = now;
+      draw();
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (pointerId !== event.pointerId) {
+        return;
+      }
+      track.releasePointerCapture(event.pointerId);
+      stopDrag();
+    };
+
+    const onPointerCancel = (event: PointerEvent) => {
+      if (pointerId !== event.pointerId) {
+        return;
+      }
+      stopDrag();
+    };
+
+    const onWindowBlur = () => {
+      if (isDragging) {
+        stopDrag();
+      }
+    };
+
+    const tick = (now: number) => {
+      if (!running) {
+        return;
+      }
+      const dt = Math.min(34, now - lastFrameTs) / 1000;
+      lastFrameTs = now;
+
+      if (!isDragging) {
+        normalizeOffset();
+        if (Math.abs(inertialVelocity) > 8 && !reducedMotion) {
+          offsetX += inertialVelocity * dt;
+          inertialVelocity *= Math.pow(0.9, dt * 60);
+        } else {
+          inertialVelocity = 0;
+          if (!reducedMotion) {
+            offsetX += autoVelocity * dt;
+          }
+        }
+      }
+
+      normalizeOffset();
+      draw();
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    track.addEventListener("pointerdown", onPointerDown);
+    track.addEventListener("pointermove", onPointerMove);
+    track.addEventListener("pointerup", onPointerUp);
+    track.addEventListener("pointercancel", onPointerCancel);
+    track.addEventListener("lostpointercapture", stopDrag);
+    window.addEventListener("blur", onWindowBlur);
+    rafId = window.requestAnimationFrame(tick);
+
+    return () => {
+      running = false;
+      window.cancelAnimationFrame(rafId);
+      groupResizeObserver.disconnect();
+      track.removeEventListener("pointerdown", onPointerDown);
+      track.removeEventListener("pointermove", onPointerMove);
+      track.removeEventListener("pointerup", onPointerUp);
+      track.removeEventListener("pointercancel", onPointerCancel);
+      track.removeEventListener("lostpointercapture", stopDrag);
+      window.removeEventListener("blur", onWindowBlur);
+      reducedMotionQuery.removeEventListener("change", onReducedMotionChange);
+    };
+  }, [snapshot]);
+
   const marketItems = (
     <>
-      <span className="shrink-0 text-cyan-300">
+      <span className="shrink-0 athena-info">
         דולר/שקל: {formatNumber(snapshot?.usd_ils, 4)}{" "}
         <span className={`ltr-number ${changeColorClass(snapshot?.usd_ils_change_pct)}`}>
           ({formatPercent(snapshot?.usd_ils_change_pct)})
@@ -123,28 +283,30 @@ export function MarketTopBar() {
         Fear &amp; Greed: {formatNumber(snapshot?.fear_greed_score, 0)}
         {snapshot?.fear_greed_rating ? ` (${snapshot.fear_greed_rating})` : ""}
       </span>
-      <span className="shrink-0 text-fuchsia-300">VIX: {formatNumber(snapshot?.vix, 2)}</span>
+      <span className="shrink-0 athena-title">VIX: {formatNumber(snapshot?.vix, 2)}</span>
       <span className={`shrink-0 ${changeColorClass(snapshot?.spy_change_pct)}`}>
         SPY: <span className="ltr-number">{formatPercent(snapshot?.spy_change_pct)}</span>
       </span>
       <span className={`shrink-0 ${changeColorClass(snapshot?.qqq_change_pct)}`}>
         QQQ: <span className="ltr-number">{formatPercent(snapshot?.qqq_change_pct)}</span>
       </span>
-      {snapshot?.updated_at_local && <span className="shrink-0 text-slate-400">עודכן: {snapshot.updated_at_local}</span>}
+      {snapshot?.updated_at_local && <span className="shrink-0 athena-muted">עודכן: {snapshot.updated_at_local}</span>}
     </>
   );
 
   return (
-    <section className="sticky top-0 z-30 mb-4 rounded-xl border border-cyan-600/30 bg-slate-950/95 px-3 py-2 shadow-lg backdrop-blur">
-      <div className="market-marquee text-xs sm:text-sm">
-        <div className="market-marquee-track">
-          <div className="market-marquee-group">{marketItems}</div>
-          <div className="market-marquee-group" aria-hidden="true">
+    <section className="sticky top-0 z-30 mb-4 rounded-xl border px-3 py-2 shadow-lg backdrop-blur athena-card athena-topbar">
+      <div className="market-marquee text-xs sm:text-sm" aria-label="market ticker draggable">
+        <div ref={marqueeTrackRef} className="market-marquee-track">
+          <div ref={marqueeGroupRef} className="market-marquee-group athena-marquee-divider">
+            {marketItems}
+          </div>
+          <div className="market-marquee-group athena-marquee-divider" aria-hidden="true">
             {marketItems}
           </div>
         </div>
       </div>
-      {error && <p className="mt-1 text-xs text-rose-300">{error}</p>}
+      {error && <p className="mt-1 text-xs athena-negative">{error}</p>}
     </section>
   );
 }

@@ -127,6 +127,28 @@ export default function HomePage() {
   const [chartError, setChartError] = useState<string | null>(null);
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [chartPoints, setChartPoints] = useState<ChartPoint[]>([]);
+  const [themeMode, setThemeMode] = useState<"dark" | "light">("dark");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const saved = window.localStorage.getItem("athena-theme");
+    const initial = saved === "light" ? "light" : "dark";
+    setThemeMode(initial);
+    document.body.classList.remove("theme-light", "theme-dark");
+    document.body.classList.add(initial === "light" ? "theme-light" : "theme-dark");
+  }, []);
+
+  function toggleTheme(): void {
+    const next = themeMode === "dark" ? "light" : "dark";
+    setThemeMode(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("athena-theme", next);
+    }
+    document.body.classList.remove("theme-light", "theme-dark");
+    document.body.classList.add(next === "light" ? "theme-light" : "theme-dark");
+  }
 
   useEffect(() => {
     if (!analysis) {
@@ -235,44 +257,53 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-4 py-6 sm:px-5 md:px-8 md:py-8">
+    <main className="mx-auto min-h-screen w-full max-w-none px-3 py-6 sm:px-5 md:px-8 md:py-8 athena-page">
       <MarketTopBar />
-      <header className="mb-6 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-lg sm:p-5 md:p-6">
-        <h1 className="text-2xl font-bold tracking-tight text-cyan-300 sm:text-3xl">Athena Invest</h1>
-        <p className="mt-2 text-sm text-slate-200 sm:text-base">
+      <header className="mb-5 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-lg sm:p-5 athena-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl athena-title">Athena Invest</h1>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="rounded-lg border border-slate-500 bg-slate-950 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-violet-400 hover:text-violet-300 athena-toggle-btn"
+          >
+            {themeMode === "dark" ? "Light Mode" : "Dark Mode"}
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-slate-200 sm:text-base athena-muted">
           חפש טיקר וקבל ניתוח טכני מלא בעברית, כולל גאפים, בעלות מוסדית וגרפים.
         </p>
       </header>
 
-      <section className="mb-8 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6">
+      <section className="mb-8 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6 athena-card">
         <form className="flex flex-col gap-4 md:flex-row" onSubmit={onAnalyzeSubmit}>
           <div className="flex-1">
-            <label htmlFor="ticker-input" className="mb-2 block text-sm font-medium text-slate-100">
+            <label htmlFor="ticker-input" className="mb-2 block text-sm font-medium text-slate-100 athena-text">
               טיקר לחיפוש
             </label>
             <input
               id="ticker-input"
               aria-label="שדה חיפוש טיקר"
-              className="w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-slate-50 outline-none ring-cyan-400 transition focus:ring-2"
+              className="w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-slate-50 outline-none ring-cyan-400 transition focus:ring-2 athena-input"
               placeholder="לדוגמה: AAPL או TA35"
               value={tickerInput}
               onChange={(event) => void onTickerInputChange(event.target.value)}
             />
-            {isSuggesting && <p className="mt-2 text-xs text-slate-300">טוען הצעות...</p>}
+            {isSuggesting && <p className="mt-2 text-xs text-slate-300 athena-muted">טוען הצעות...</p>}
             {!isSuggesting && suggestions.length > 0 && (
-              <ul className="mt-2 max-h-40 overflow-auto rounded-lg border border-slate-600 bg-slate-950">
+              <ul className="mt-2 max-h-40 overflow-auto rounded-lg border border-slate-600 bg-slate-950 athena-subcard">
                 {suggestions.map((item) => (
                   <li key={`${item.symbol}-${item.exchange}`}>
                     <button
                       type="button"
-                      className="flex w-full items-start justify-between gap-2 border-b border-slate-800 px-3 py-2 text-right hover:bg-slate-800/70"
+                      className="flex w-full items-start justify-between gap-2 border-b border-slate-800 px-3 py-2 text-right hover:bg-slate-800/70 athena-suggestion-row"
                       onClick={() => {
                         setTickerInput(item.symbol);
                         setSuggestions([]);
                       }}
                     >
-                      <span className="font-semibold text-cyan-300">{item.symbol}</span>
-                      <span className="text-xs text-slate-300">
+                      <span className="font-semibold athena-title">{item.symbol}</span>
+                      <span className="text-xs text-slate-300 athena-muted">
                         {item.name} | {item.exchange}
                       </span>
                     </button>
@@ -285,7 +316,7 @@ export default function HomePage() {
             <button
               type="submit"
               disabled={isAnalyzing || !tickerInput.trim()}
-              className="w-full rounded-lg bg-cyan-500 px-6 py-2 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-cyan-800 md:w-auto"
+              className="w-full rounded-lg px-5 py-2 font-semibold disabled:cursor-not-allowed md:w-auto athena-primary-btn"
             >
               {isAnalyzing ? "מנתח..." : "נתח טיקר"}
             </button>
@@ -298,46 +329,44 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-6 xl:grid-cols-12">
-        {analysis && (
-          <article className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6 xl:col-span-12">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-2xl font-bold text-cyan-300">{analysis.ticker}</h2>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  analysis.is_positive ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"
-                }`}
-              >
-                כיוון: {analysis.is_positive ? "חיובי" : "שלילי"}
-              </span>
+        <article className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6 xl:col-span-12 athena-card">
+          {analysis && <h2 className="mb-3 text-xl font-semibold athena-title">{analysis.ticker}</h2>}
+          {analysis && (
+            <div className="mb-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold athena-title">פרופיל החברה + ניתוח</h3>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                    analysis.is_positive ? "athena-badge-positive" : "athena-badge-negative"
+                  }`}
+                >
+                  כיוון: {analysis.is_positive ? "חיובי" : "שלילי"}
+                </span>
+              </div>
+              <div className="grid gap-3 text-sm text-slate-100 sm:grid-cols-2 lg:grid-cols-3">
+                <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 athena-subcard">
+                  <span className="text-slate-400 athena-muted">סקטור: </span>
+                  {analysis.company_profile.sector ?? "לא זמין"}
+                </p>
+                <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 athena-subcard">
+                  <span className="text-slate-400 athena-muted">תעשייה: </span>
+                  {analysis.company_profile.industry ?? "לא זמין"}
+                </p>
+                <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 athena-subcard">
+                  <span className="text-slate-400 athena-muted">שווי שוק: </span>
+                  {analysis.company_profile.market_cap ?? "לא זמין"}
+                </p>
+              </div>
+              <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300 athena-subcard athena-muted">
+                {analysis.company_profile.summary ?? "אין סיכום זמין."}
+              </p>
             </div>
-            <h3 className="mb-2 text-sm font-semibold text-cyan-300">פרופיל החברה</h3>
-            <div className="grid gap-3 text-sm text-slate-100 sm:grid-cols-2 lg:grid-cols-3">
-              <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
-                <span className="text-slate-400">סקטור: </span>
-                {analysis.company_profile.sector ?? "לא זמין"}
-              </p>
-              <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
-                <span className="text-slate-400">תעשייה: </span>
-                {analysis.company_profile.industry ?? "לא זמין"}
-              </p>
-              <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2">
-                <span className="text-slate-400">שווי שוק: </span>
-                {analysis.company_profile.market_cap ?? "לא זמין"}
-              </p>
-            </div>
-            <p className="mt-3 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-300">
-              {analysis.company_profile.summary ?? "אין סיכום זמין."}
-            </p>
-          </article>
-        )}
-
-        <article className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6 xl:col-span-7 2xl:col-span-8">
-          {analysis && <h2 className="mb-3 text-xl font-semibold text-cyan-300">{analysis.ticker}</h2>}
+          )}
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className={`rounded-lg px-3 py-1 text-sm sm:px-4 ${
-                activeTab === "overview" ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-100"
+              className={`rounded-lg px-3 py-1 text-sm sm:px-4 athena-tab-btn ${
+                activeTab === "overview" ? "athena-tab-btn-active" : ""
               }`}
               onClick={() => setActiveTab("overview")}
             >
@@ -345,8 +374,8 @@ export default function HomePage() {
             </button>
             <button
               type="button"
-              className={`rounded-lg px-3 py-1 text-sm sm:px-4 ${
-                activeTab === "gaps" ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-100"
+              className={`rounded-lg px-3 py-1 text-sm sm:px-4 athena-tab-btn ${
+                activeTab === "gaps" ? "athena-tab-btn-active" : ""
               }`}
               onClick={() => setActiveTab("gaps")}
             >
@@ -354,8 +383,8 @@ export default function HomePage() {
             </button>
             <button
               type="button"
-              className={`rounded-lg px-3 py-1 text-sm sm:px-4 ${
-                activeTab === "ownership" ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-100"
+              className={`rounded-lg px-3 py-1 text-sm sm:px-4 athena-tab-btn ${
+                activeTab === "ownership" ? "athena-tab-btn-active" : ""
               }`}
               onClick={() => setActiveTab("ownership")}
             >
@@ -363,12 +392,12 @@ export default function HomePage() {
             </button>
           </div>
 
-          {!analysis && <p className="text-sm text-slate-300">עדיין לא בוצע ניתוח. חפש טיקר כדי להתחיל.</p>}
+          {!analysis && <p className="text-sm text-slate-300 athena-muted">עדיין לא בוצע ניתוח. חפש טיקר כדי להתחיל.</p>}
 
           {analysis && activeTab === "overview" && (
             <div className="space-y-4">
-              <div className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-                <h3 className="mb-2 text-sm font-semibold text-cyan-300">מה חשוב עכשיו</h3>
+              <div className="rounded-xl border border-slate-700 bg-slate-950 p-4 athena-subcard">
+                <h3 className="mb-2 text-sm font-semibold athena-title">מה חשוב עכשיו</h3>
                 <div className="space-y-2 text-sm text-slate-200">
                   {buildPriorityInsights(analysis).map((item, idx) => (
                     <div
@@ -381,7 +410,7 @@ export default function HomePage() {
                             : "border-slate-700 bg-slate-900/60"
                       }`}
                     >
-                      <p className="text-xs font-semibold text-cyan-300">{item.title}</p>
+                      <p className="text-xs font-semibold athena-title">{item.title}</p>
                       <p>{item.value}</p>
                     </div>
                   ))}
@@ -392,26 +421,26 @@ export default function HomePage() {
 
           {analysis && activeTab === "gaps" && (
             <div className="space-y-3 text-sm text-slate-100">
-              <h2 className="text-lg font-semibold text-cyan-300">מצב גאפים</h2>
+              <h2 className="text-lg font-semibold athena-title">מצב גאפים</h2>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-slate-700 bg-slate-950 p-3">
-                  <p className="text-xs text-slate-400">פתוחים</p>
-                  <p className="text-lg font-bold text-cyan-300">{String(analysis.gap_summary.open_count ?? 0)}</p>
+                <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 athena-subcard">
+                  <p className="text-xs text-slate-400 athena-muted">פתוחים</p>
+                  <p className="text-lg font-bold athena-title">{String(analysis.gap_summary.open_count ?? 0)}</p>
                 </div>
-                <div className="rounded-lg border border-slate-700 bg-slate-950 p-3">
-                  <p className="text-xs text-slate-400">Gap Up</p>
-                  <p className="text-lg font-bold text-emerald-300">{String(analysis.gap_summary.up_count ?? 0)}</p>
+                <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 athena-subcard">
+                  <p className="text-xs text-slate-400 athena-muted">Gap Up</p>
+                  <p className="text-lg font-bold athena-positive">{String(analysis.gap_summary.up_count ?? 0)}</p>
                 </div>
-                <div className="rounded-lg border border-slate-700 bg-slate-950 p-3">
-                  <p className="text-xs text-slate-400">Gap Down</p>
-                  <p className="text-lg font-bold text-rose-300">{String(analysis.gap_summary.down_count ?? 0)}</p>
+                <div className="rounded-lg border border-slate-700 bg-slate-950 p-3 athena-subcard">
+                  <p className="text-xs text-slate-400 athena-muted">Gap Down</p>
+                  <p className="text-lg font-bold athena-negative">{String(analysis.gap_summary.down_count ?? 0)}</p>
                 </div>
               </div>
               <h3 className="text-base font-semibold">רשימת גאפים פתוחים</h3>
               <div className="space-y-2">
-                {analysis.open_gaps.length === 0 && <p className="text-slate-300">אין כרגע גאפים פתוחים.</p>}
+                {analysis.open_gaps.length === 0 && <p className="text-slate-300 athena-muted">אין כרגע גאפים פתוחים.</p>}
                 {analysis.open_gaps.map((gap, idx) => (
-                  <div key={idx} className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-xs text-slate-200">
+                  <div key={idx} className="rounded-lg border border-slate-700 bg-slate-950 p-3 text-xs text-slate-200 athena-subcard">
                     <p>
                       {String(gap.direction ?? "unknown")} | טווח {String(gap.zone_low ?? "-")} - {String(gap.zone_high ?? "-")}
                     </p>
@@ -434,14 +463,14 @@ export default function HomePage() {
           {analysis && activeTab === "ownership" && (
             <div className="space-y-3 text-sm text-slate-100">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold text-cyan-300">בעלות מוסדית</h2>
+                <h2 className="text-lg font-semibold athena-title">בעלות מוסדית</h2>
                 <InfoTooltip
                   label="הסבר על מוסדיים ואינסיידרים"
                   content="מוסדיים הם גופים גדולים כמו קרנות פנסיה, גמל ונאמנות. אינסיידרים הם הנהלה ובעלי עניין בחברה. אחוזים גבוהים של מוסדיים יכולים להעיד על אמון ארוך טווח, אבל צריך תמיד לשלב עם ניתוח טכני ופונדמנטלי."
                 />
               </div>
               {analysis.ownership ? (
-                <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-950 p-4">
+                <div className="space-y-2 rounded-xl border border-slate-700 bg-slate-950 p-4 athena-subcard">
                   {ownershipSummary(analysis.ownership).overview.map((line, idx) => (
                     <p key={`overview-${idx}`} className="text-slate-100">
                       {line}
@@ -449,7 +478,7 @@ export default function HomePage() {
                   ))}
                   {ownershipSummary(analysis.ownership).holders.length > 0 && (
                     <div className="pt-2">
-                      <p className="mb-1 font-semibold text-cyan-300">מחזיקים מובילים</p>
+                      <p className="mb-1 font-semibold athena-title">מחזיקים מובילים</p>
                       {ownershipSummary(analysis.ownership).holders.map((line, idx) => (
                         <p key={`holder-${idx}`} className="text-slate-200">
                           {idx + 1}. {line}
@@ -459,16 +488,16 @@ export default function HomePage() {
                   )}
                 </div>
               ) : (
-                <p className="text-slate-300">אין כרגע נתוני בעלות מוסדית עבור הטיקר הזה.</p>
+                <p className="text-slate-300 athena-muted">אין כרגע נתוני בעלות מוסדית עבור הטיקר הזה.</p>
               )}
             </div>
           )}
         </article>
 
-        <aside className="space-y-6 xl:col-span-5 2xl:col-span-4">
-          <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4">
+        <aside className="space-y-6 xl:col-span-12">
+          <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 athena-card">
             <div className="mb-3 flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-cyan-300">גרף אינטראקטיבי</h2>
+              <h2 className="text-lg font-semibold athena-title">גרף אינטראקטיבי</h2>
               <InfoTooltip
                 label="הסבר על רכיבי הגרף"
                 content={
@@ -486,42 +515,48 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => setChartMode("full")}
-                className={`rounded px-3 py-1 text-xs ${chartMode === "full" ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-100"}`}
+                className={`rounded px-3 py-1 text-xs athena-tab-btn ${chartMode === "full" ? "athena-tab-btn-active" : ""}`}
               >
                 גרף מלא
               </button>
               <button
                 type="button"
                 onClick={() => setChartMode("gaps_only")}
-                className={`rounded px-3 py-1 text-xs ${
-                  chartMode === "gaps_only" ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-100"
-                }`}
+                className={`rounded px-3 py-1 text-xs athena-tab-btn ${chartMode === "gaps_only" ? "athena-tab-btn-active" : ""}`}
               >
                 גאפים בלבד
               </button>
             </div>
             {analysis ? (
               <div className="space-y-2">
-                {isChartLoading && <p className="text-xs text-slate-300">טוען גרף...</p>}
+                {isChartLoading && <p className="text-xs text-slate-300 athena-muted">טוען גרף...</p>}
                 {chartError && <p className="text-xs text-rose-300">{chartError}</p>}
-                {chartSrc && <InteractivePriceChart points={chartPoints} gaps={analysis.open_gaps} mode={chartMode} />}
-                <p className="text-[11px] text-slate-400">
+                {chartSrc && (
+                  <InteractivePriceChart
+                    points={chartPoints}
+                    gaps={analysis.open_gaps}
+                    mode={chartMode}
+                    theme={themeMode}
+                    ticker={analysis.ticker}
+                  />
+                )}
+                <p className="text-[11px] text-slate-400 athena-muted">
                   אפשר לבצע זום עם הגלגלת, לגרור שמאלה/ימינה ולהגדיל את חלון האזור לקבלת תצוגה גדולה יותר.
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-slate-300">הגרף יוצג לאחר ביצוע ניתוח.</p>
+              <p className="text-sm text-slate-300 athena-muted">הגרף יוצג לאחר ביצוע ניתוח.</p>
             )}
           </section>
         </aside>
       </section>
 
-      <section className="mt-8 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6">
-        <h2 className="mb-3 text-xl font-semibold text-cyan-300 sm:text-2xl">צ׳אט פיננסי עם Perplexity</h2>
-        <p className="mb-4 text-sm text-slate-200">
+      <section className="mt-8 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6 athena-card">
+        <h2 className="mb-3 text-xl font-semibold sm:text-2xl athena-title">צ׳אט פיננסי עם Perplexity</h2>
+        <p className="mb-4 text-sm text-slate-200 athena-muted">
           הזן API Key אישי כדי לשאול שאלות המשך. המפתח נשמר רק בסשן הנוכחי בדפדפן ולא נשמר במסד נתונים.
         </p>
-        <details className="mb-4 rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm text-slate-200">
+        <details className="mb-4 rounded-lg border border-slate-700 bg-slate-950 p-3 text-sm text-slate-200 athena-subcard">
           <summary className="cursor-pointer font-semibold">איך מוציאים API Key ב-Perplexity?</summary>
           <ol className="mt-2 list-decimal space-y-1 pe-6 text-xs">
             <li>היכנס לחשבון שלך ב-Perplexity.</li>
@@ -538,7 +573,7 @@ export default function HomePage() {
               type="password"
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              className="w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-slate-50 outline-none ring-cyan-400 focus:ring-2"
+              className="w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-slate-50 outline-none ring-cyan-400 focus:ring-2 athena-input"
               placeholder="pplx-..."
             />
           </label>
@@ -548,14 +583,14 @@ export default function HomePage() {
               aria-label="שאלה לצאט"
               value={chatQuestion}
               onChange={(event) => setChatQuestion(event.target.value)}
-              className="min-h-24 w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-slate-50 outline-none ring-cyan-400 focus:ring-2"
+              className="min-h-24 w-full rounded-lg border border-slate-500 bg-slate-950 px-3 py-2 text-slate-50 outline-none ring-cyan-400 focus:ring-2 athena-input"
               placeholder="לדוגמה: מה הסיכונים המרכזיים לטווח 3 חודשים בטיקר הזה?"
             />
           </label>
           <button
             type="submit"
             disabled={isChatting || !apiKey.trim() || !chatQuestion.trim()}
-            className="rounded-lg bg-cyan-500 px-4 py-2 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:bg-cyan-800"
+            className="rounded-lg px-4 py-2 font-semibold disabled:cursor-not-allowed athena-primary-btn"
           >
             {isChatting ? "שולח..." : "שאל את הצ׳אט"}
           </button>
@@ -565,12 +600,12 @@ export default function HomePage() {
           <p className="mt-1 rounded bg-slate-950 px-2 py-1 text-xs text-amber-300">{chatAdminFeedback}</p>
         )}
         {chatResult && (
-          <div className="mt-4 space-y-3 rounded-xl border border-slate-700 bg-slate-950 p-4">
-            <p className="text-xs text-slate-400">מודל: {chatResult.model}</p>
+          <div className="mt-4 space-y-3 rounded-xl border border-slate-700 bg-slate-950 p-4 athena-subcard">
+            <p className="text-xs text-slate-400 athena-muted">מודל: {chatResult.model}</p>
             <p className="whitespace-pre-wrap text-sm text-slate-100">{chatResult.answer}</p>
             {chatResult.citations.length > 0 && (
               <div>
-                <p className="mb-1 text-xs font-semibold text-cyan-300">מקורות:</p>
+                <p className="mb-1 text-xs font-semibold athena-title">מקורות:</p>
                 <ul className="space-y-1 text-xs text-slate-300">
                   {chatResult.citations.map((item, idx) => (
                     <li key={`${item.url}-${idx}`}>

@@ -2,13 +2,31 @@
 
 :root {
   color-scheme: dark;
+  --athena-bg: #090714;
+  --athena-text: #f5f3ff;
+  --athena-muted: #b7afd5;
+  --athena-card-bg: rgba(20, 14, 37, 0.78);
+  --athena-subcard-bg: #110d22;
+  --athena-card-border: #3a2f63;
+  --athena-input-bg: #130f29;
+  --athena-input-text: #f5f3ff;
+  --athena-input-border: #5f4ea0;
+  --athena-hover-row: rgba(94, 78, 160, 0.2);
+  --athena-accent: #a78bfa;
+  --athena-accent-strong: #8b5cf6;
+  --athena-accent-soft: rgba(167, 139, 250, 0.18);
+  --athena-on-accent: #f8f5ff;
+  --athena-positive: #34d399;
+  --athena-negative: #fb7185;
+  --athena-warning: #f59e0b;
+  --athena-info: #67e8f9;
 }
 
 body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, Arial, sans-serif;
-  background: #0b1020;
-  color: #f8fafc;
+  background: var(--athena-bg);
+  color: var(--athena-text);
 }
 
 a {
@@ -23,8 +41,14 @@ a {
 .market-marquee-track {
   display: flex;
   width: max-content;
-  animation: market-marquee-right 24s linear infinite;
   will-change: transform;
+  user-select: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+.market-marquee-track.is-dragging {
+  cursor: grabbing;
 }
 
 .market-marquee-group {
@@ -38,21 +62,12 @@ a {
 .market-marquee-group > *:not(:last-child)::after {
   content: "•";
   margin-inline-start: 1rem;
-  color: #64748b;
-}
-
-@keyframes market-marquee-right {
-  from {
-    transform: translateX(-50%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  color: var(--athena-muted);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .market-marquee-track {
-    animation: none;
+    transition: none;
   }
 }
 
@@ -60,4 +75,235 @@ a {
   direction: ltr;
   unicode-bidi: isolate;
   display: inline-block;
+}
+
+body.theme-dark {
+  color-scheme: dark;
+}
+
+body.theme-light {
+  color-scheme: light;
+  --athena-bg: #f4f2ff;
+  --athena-text: #261b44;
+  --athena-muted: #6f6598;
+  --athena-card-bg: #ffffff;
+  --athena-subcard-bg: #f8f6ff;
+  --athena-card-border: #d8cff8;
+  --athena-input-bg: #ffffff;
+  --athena-input-text: #261b44;
+  --athena-input-border: #b8a9f0;
+  --athena-hover-row: rgba(139, 92, 246, 0.12);
+  --athena-accent: #7c3aed;
+  --athena-accent-strong: #6d28d9;
+  --athena-accent-soft: rgba(124, 58, 237, 0.14);
+  --athena-on-accent: #ffffff;
+  --athena-positive: #059669;
+  --athena-negative: #e11d48;
+  --athena-warning: #b45309;
+  --athena-info: #0369a1;
+}
+
+.athena-page {
+  background: var(--athena-bg);
+  color: var(--athena-text);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.athena-page::before,
+.athena-page::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  filter: blur(48px);
+  pointer-events: none;
+}
+
+.athena-page::before {
+  width: 22rem;
+  height: 22rem;
+  top: -7rem;
+  left: -5rem;
+  background: radial-gradient(circle, color-mix(in srgb, var(--athena-accent) 45%, transparent), transparent 68%);
+  animation: athena-float-a 14s ease-in-out infinite alternate;
+}
+
+.athena-page::after {
+  width: 18rem;
+  height: 18rem;
+  bottom: -5rem;
+  right: -4rem;
+  background: radial-gradient(circle, color-mix(in srgb, var(--athena-info) 45%, transparent), transparent 70%);
+  animation: athena-float-b 16s ease-in-out infinite alternate;
+}
+
+.athena-card {
+  background: var(--athena-card-bg) !important;
+  border-color: var(--athena-card-border) !important;
+  box-shadow: 0 12px 28px -20px rgba(20, 12, 48, 0.7);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.athena-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 30px -20px rgba(95, 78, 160, 0.46);
+  border-color: color-mix(in srgb, var(--athena-accent) 50%, var(--athena-card-border)) !important;
+}
+
+.athena-subcard {
+  background: var(--athena-subcard-bg) !important;
+  border-color: var(--athena-card-border) !important;
+}
+
+.athena-input {
+  background: var(--athena-input-bg) !important;
+  border-color: var(--athena-input-border) !important;
+  color: var(--athena-input-text) !important;
+}
+
+.athena-muted {
+  color: var(--athena-muted) !important;
+}
+
+.athena-text {
+  color: var(--athena-text) !important;
+}
+
+.athena-suggestion-row:hover {
+  background: var(--athena-hover-row) !important;
+}
+
+.athena-toggle-btn {
+  background: var(--athena-subcard-bg) !important;
+  border-color: var(--athena-input-border) !important;
+  color: var(--athena-input-text) !important;
+}
+
+.athena-title {
+  background: linear-gradient(120deg, var(--athena-accent), color-mix(in srgb, var(--athena-info) 60%, var(--athena-accent)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent !important;
+}
+
+.athena-primary-btn {
+  background: linear-gradient(135deg, var(--athena-accent), var(--athena-accent-strong)) !important;
+  color: var(--athena-on-accent) !important;
+  box-shadow: 0 10px 22px -14px color-mix(in srgb, var(--athena-accent) 60%, transparent);
+  transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.athena-primary-btn:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.01);
+  filter: brightness(1.04);
+  box-shadow: 0 14px 24px -14px color-mix(in srgb, var(--athena-accent) 72%, transparent);
+}
+
+.athena-primary-btn:disabled {
+  background: rgba(109, 40, 217, 0.38) !important;
+}
+
+.athena-tab-btn {
+  border: 1px solid var(--athena-card-border);
+  background: color-mix(in srgb, var(--athena-subcard-bg) 88%, transparent);
+  color: var(--athena-text);
+  transition: transform 140ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.athena-tab-btn:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--athena-accent) 48%, var(--athena-card-border));
+  background: color-mix(in srgb, var(--athena-accent) 14%, var(--athena-subcard-bg));
+}
+
+.athena-tab-btn-active {
+  border-color: var(--athena-accent-strong) !important;
+  background: var(--athena-accent-soft) !important;
+  color: var(--athena-accent) !important;
+}
+
+.athena-badge-positive {
+  border: 1px solid color-mix(in srgb, var(--athena-positive) 35%, transparent);
+  background: color-mix(in srgb, var(--athena-positive) 20%, transparent);
+  color: var(--athena-positive);
+}
+
+.athena-badge-negative {
+  border: 1px solid color-mix(in srgb, var(--athena-negative) 35%, transparent);
+  background: color-mix(in srgb, var(--athena-negative) 20%, transparent);
+  color: var(--athena-negative);
+}
+
+.athena-positive {
+  color: var(--athena-positive) !important;
+  font-weight: 700;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--athena-positive) 35%, transparent);
+}
+
+.athena-negative {
+  color: var(--athena-negative) !important;
+  font-weight: 700;
+  text-shadow: 0 0 16px color-mix(in srgb, var(--athena-negative) 35%, transparent);
+}
+
+.athena-warning {
+  color: var(--athena-warning) !important;
+}
+
+.athena-info {
+  color: var(--athena-info) !important;
+}
+
+.athena-topbar {
+  border-color: color-mix(in srgb, var(--athena-accent) 35%, transparent) !important;
+  background: color-mix(in srgb, var(--athena-card-bg) 90%, transparent) !important;
+}
+
+.athena-marquee-divider::after {
+  color: color-mix(in srgb, var(--athena-muted) 75%, transparent) !important;
+}
+
+body.theme-light .athena-card .border-slate-700,
+body.theme-light .athena-card .border-slate-600,
+body.theme-light .athena-card .border-slate-500,
+body.theme-light .athena-subcard .border-slate-700,
+body.theme-light .athena-subcard .border-slate-600,
+body.theme-light .athena-subcard .border-slate-500 {
+  border-color: var(--athena-card-border) !important;
+}
+
+body.theme-light .athena-card .bg-slate-800 {
+  background-color: var(--athena-subcard-bg) !important;
+}
+
+body.theme-light .athena-card .text-slate-50,
+body.theme-light .athena-card .text-slate-100,
+body.theme-light .athena-card .text-slate-200,
+body.theme-light .athena-card .text-slate-300,
+body.theme-light .athena-card .text-slate-400,
+body.theme-light .athena-subcard .text-slate-50,
+body.theme-light .athena-subcard .text-slate-100,
+body.theme-light .athena-subcard .text-slate-200,
+body.theme-light .athena-subcard .text-slate-300,
+body.theme-light .athena-subcard .text-slate-400 {
+  color: var(--athena-text) !important;
+}
+
+@keyframes athena-float-a {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(20px, -10px, 0) scale(1.08);
+  }
+}
+
+@keyframes athena-float-b {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-22px, 12px, 0) scale(1.1);
+  }
 }
