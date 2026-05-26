@@ -37,6 +37,7 @@ class AnalysisPayload(BaseModel):
     ticker: str
     formatted_text_he: str
     is_positive: bool
+    daily_change_pct: float | None = None
     technical_signal: str | None = None
     status: str | None = None
     risk: str | None = None
@@ -79,6 +80,15 @@ class MarketSnapshotResponse(BaseModel):
     spy_change_pct: float | None = None
     qqq_change_pct: float | None = None
     cache_ttl_seconds: int = 300
+
+
+class ActiveUsersHeartbeatRequest(BaseModel):
+    session_id: str = Field(min_length=8, max_length=128)
+
+
+class ActiveUsersResponse(BaseModel):
+    active_users: int
+    window_seconds: int
 
 
 class PerplexityChatRequest(BaseModel):

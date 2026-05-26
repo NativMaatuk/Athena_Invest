@@ -47,6 +47,24 @@ def _to_json_safe(value):
     return str(value)
 
 
+def _resolve_daily_change_pct(analysis: dict) -> float | None:
+    raw = analysis.get("daily_change_pct")
+    try:
+        if raw is not None:
+            return float(raw)
+    except (TypeError, ValueError):
+        pass
+
+    current_price = analysis.get("current_price")
+    previous_close = analysis.get("previous_close")
+    try:
+        if current_price is None or previous_close in (None, 0):
+            return None
+        return ((float(current_price) - float(previous_close)) / float(previous_close)) * 100
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
 def to_analysis_payload(result: AnalysisResult) -> AnalysisPayload:
     analysis = result.analysis or {}
     info = result.info or {}
@@ -55,6 +73,7 @@ def to_analysis_payload(result: AnalysisResult) -> AnalysisPayload:
         ticker=result.ticker,
         formatted_text_he=output_text,
         is_positive=bool(analysis.get("is_positive", False)),
+        daily_change_pct=_resolve_daily_change_pct(analysis),
         technical_signal=_extract_first_matching_line(output_text, ("🎯", "⛔")),
         status=_extract_first_matching_line(output_text, ("סטטוס נוכחי",)),
         risk=_extract_first_matching_line(output_text, ("רמת סיכון", "אזהרת סיכון")),

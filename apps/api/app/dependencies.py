@@ -6,6 +6,7 @@ from fastapi import HTTPException, Request, status
 
 from .config import ApiSettings
 from .rate_limit import InMemoryRateLimiter
+from .services.active_users_service import ActiveUsersService
 from .services.analysis_runtime import AnalysisRuntime
 from .services.market_snapshot import MarketSnapshotService
 from .services.perplexity_client import PerplexityClient
@@ -34,6 +35,11 @@ def get_perplexity_client() -> PerplexityClient:
 @lru_cache(maxsize=1)
 def get_market_snapshot_service() -> MarketSnapshotService:
     return MarketSnapshotService(cache_ttl_seconds=300)
+
+
+@lru_cache(maxsize=1)
+def get_active_users_service() -> ActiveUsersService:
+    return ActiveUsersService(window_seconds=300)
 
 
 def enforce_rate_limit(request: Request, *, bucket: str, limit: int) -> None:

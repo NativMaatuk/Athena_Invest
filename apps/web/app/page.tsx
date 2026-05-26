@@ -30,6 +30,19 @@ function cleanLine(text: string): string {
   return text.replaceAll("**", "").replace(/\s+/g, " ").trim();
 }
 
+function formatDailyChange(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return "—";
+  }
+  if (value > 0) {
+    return `+${value.toFixed(2)}%`;
+  }
+  if (value < 0) {
+    return `-${Math.abs(value).toFixed(2)}%`;
+  }
+  return "0.00%";
+}
+
 function analysisHighlights(text: string): string[] {
   return text
     .split("\n")
@@ -127,6 +140,7 @@ export default function HomePage() {
   const [chartError, setChartError] = useState<string | null>(null);
   const [isChartLoading, setIsChartLoading] = useState(false);
   const [chartPoints, setChartPoints] = useState<ChartPoint[]>([]);
+  const [activeUsersCount, setActiveUsersCount] = useState<number | null>(null);
   const [themeMode, setThemeMode] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -258,17 +272,22 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-none px-3 py-6 sm:px-5 md:px-8 md:py-8 athena-page">
-      <MarketTopBar />
+      <MarketTopBar onActiveUsersChange={setActiveUsersCount} />
       <header className="mb-5 rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-lg sm:p-5 athena-card">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl athena-title">Athena Invest</h1>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="rounded-lg border border-slate-500 bg-slate-950 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-violet-400 hover:text-violet-300 athena-toggle-btn"
-          >
-            {themeMode === "dark" ? "Light Mode" : "Dark Mode"}
-          </button>
+          <div className="flex items-center gap-2">
+            <span className="rounded-lg border border-slate-500 bg-slate-950 px-3 py-1 text-xs font-semibold text-slate-100 athena-toggle-btn">
+              פעילים עכשיו: <span className="ltr-number athena-info">{activeUsersCount ?? "—"}</span>
+            </span>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="rounded-lg border border-slate-500 bg-slate-950 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-violet-400 hover:text-violet-300 athena-toggle-btn"
+            >
+              {themeMode === "dark" ? "Light Mode" : "Dark Mode"}
+            </button>
+          </div>
         </div>
         <p className="mt-2 text-sm text-slate-200 sm:text-base athena-muted">
           חפש טיקר וקבל ניתוח טכני מלא בעברית, כולל גאפים, בעלות מוסדית וגרפים.
@@ -328,6 +347,8 @@ export default function HomePage() {
         )}
       </section>
 
+      {analysis && (
+      <>
       <section className="grid gap-6 xl:grid-cols-12">
         <article className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 sm:p-5 md:p-6 xl:col-span-12 athena-card">
           {analysis && <h2 className="mb-3 text-xl font-semibold athena-title">{analysis.ticker}</h2>}
@@ -335,13 +356,29 @@ export default function HomePage() {
             <div className="mb-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-sm font-semibold athena-title">פרופיל החברה + ניתוח</h3>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                    analysis.is_positive ? "athena-badge-positive" : "athena-badge-negative"
-                  }`}
-                >
-                  כיוון: {analysis.is_positive ? "חיובי" : "שלילי"}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                      analysis.is_positive ? "athena-badge-positive" : "athena-badge-negative"
+                    }`}
+                  >
+                    כיוון: {analysis.is_positive ? "חיובי" : "שלילי"}
+                  </span>
+                  <span
+                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                      typeof analysis.daily_change_pct === "number"
+                        ? analysis.daily_change_pct >= 0
+                          ? "athena-badge-positive"
+                          : "athena-badge-negative"
+                        : "athena-muted"
+                    }`}
+                  >
+                    שינוי יומי:{" "}
+                    <span className="ltr-number" dir="ltr">
+                      {formatDailyChange(analysis.daily_change_pct)}
+                    </span>
+                  </span>
+                </div>
               </div>
               <div className="grid gap-3 text-sm text-slate-100 sm:grid-cols-2 lg:grid-cols-3">
                 <p className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 athena-subcard">
@@ -391,8 +428,6 @@ export default function HomePage() {
               בעלות מוסדית
             </button>
           </div>
-
-          {!analysis && <p className="text-sm text-slate-300 athena-muted">עדיין לא בוצע ניתוח. חפש טיקר כדי להתחיל.</p>}
 
           {analysis && activeTab === "overview" && (
             <div className="space-y-4">
@@ -624,6 +659,8 @@ export default function HomePage() {
           </div>
         )}
       </section>
+      </>
+      )}
     </main>
   );
 }

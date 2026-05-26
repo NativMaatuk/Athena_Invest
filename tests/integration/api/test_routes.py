@@ -36,6 +36,7 @@ class FakeAnalysisService:
             output_text="🎯 איתות כניסה\nסטטוס נוכחי: Breakout\nרמת סיכון: בינונית",
             analysis={
                 "is_positive": True,
+                "daily_change_pct": 1.2,
                 "gap_summary": {"open_count": 1},
                 "open_gaps": [{"zone_low": 100.0, "zone_high": 102.0}],
             },
@@ -97,6 +98,7 @@ def test_analysis_route_returns_payload():
     assert response.status_code == 200
     body = response.json()
     assert body["ticker"] == "AAPL"
+    assert body["daily_change_pct"] == 1.2
     assert body["gap_summary"]["open_count"] == 1
 
 
@@ -144,3 +146,17 @@ def test_perplexity_chat_route():
     body = response.json()
     assert body["answer"]
     assert body["model"] == "sonar-pro"
+
+
+def test_presence_routes():
+    client = build_client()
+    heartbeat = client.post("/api/v1/presence/heartbeat", json={"session_id": "session-test-123"})
+    assert heartbeat.status_code == 200
+    heartbeat_body = heartbeat.json()
+    assert heartbeat_body["active_users"] >= 1
+
+    count = client.get("/api/v1/presence/active-users")
+    assert count.status_code == 200
+    count_body = count.json()
+    assert count_body["active_users"] >= 1
+    assert count_body["window_seconds"] == 300

@@ -11,6 +11,7 @@ export type AnalysisPayload = {
   ticker: string;
   formatted_text_he: string;
   is_positive: boolean;
+  daily_change_pct?: number | null;
   technical_signal?: string | null;
   status?: string | null;
   risk?: string | null;
@@ -59,6 +60,11 @@ export type MarketSnapshot = {
   spy_change_pct?: number | null;
   qqq_change_pct?: number | null;
   cache_ttl_seconds?: number;
+};
+
+export type ActiveUsersPayload = {
+  active_users: number;
+  window_seconds: number;
 };
 
 type ApiErrorEnvelope = {
@@ -178,6 +184,34 @@ export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
     );
   }
   return parseOrThrow<MarketSnapshot>(response);
+}
+
+export async function sendPresenceHeartbeat(sessionId: string): Promise<ActiveUsersPayload> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/presence/heartbeat`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן לעדכן נוכחות כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<ActiveUsersPayload>(response);
+}
+
+export async function fetchActiveUsers(): Promise<ActiveUsersPayload> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/presence/active-users`, {
+      method: "GET",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן לטעון מספר משתמשים מחוברים כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<ActiveUsersPayload>(response);
 }
 
 export async function askPerplexity(

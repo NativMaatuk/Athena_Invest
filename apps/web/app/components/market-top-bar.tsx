@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { ApiClientError, MarketSnapshot, fetchMarketSnapshot } from "@/lib/api";
+import {
+  ApiClientError,
+  MarketSnapshot,
+  fetchActiveUsers,
+  fetchMarketSnapshot,
+  sendPresenceHeartbeat,
+} from "@/lib/api";
+
+const PRESENCE_REFRESH_MS = 45_000;
+const PRESENCE_STORAGE_KEY = "athena-presence-session-id";
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) {
@@ -70,8 +79,13 @@ function fearGreedColorClass(score: number | null | undefined, rating: string | 
   return "athena-text";
 }
 
-export function MarketTopBar() {
+type MarketTopBarProps = {
+  onActiveUsersChange?: (count: number | null) => void;
+};
+
+export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
   const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
+  const [activeUsers, setActiveUsers] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
   const marqueeGroupRef = useRef<HTMLDivElement | null>(null);
@@ -110,6 +124,60 @@ export function MarketTopBar() {
     return () => {
       active = false;
       window.clearInterval(dataInterval);
+    };
+  }, []);
+
+  useEffect(() => {
+    onActiveUsersChange?.(activeUsers);
+  }, [activeUsers, onActiveUsersChange]);
+
+  useEffect(() => {
+    let active = true;
+
+    const getOrCreateSessionId = (): string => {
+      const existing = window.localStorage.getItem(PRESENCE_STORAGE_KEY);
+      if (existing && existing.length >= 8) {
+        return existing;
+      }
+      const nextId =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      window.localStorage.setItem(PRESENCE_STORAGE_KEY, nextId);
+      return nextId;
+    };
+
+    const refreshPresence = async () => {
+      const sessionId = getOrCreateSessionId();
+      try {
+        const heartbeat = await sendPresenceHeartbeat(sessionId);
+        if (!active) {
+          return;
+        }
+        setActiveUsers(heartbeat.active_users);
+      } catch {
+        // Keep UI resilient if heartbeat fails.
+      }
+
+      try {
+        const current = await fetchActiveUsers();
+        if (!active) {
+          return;
+        }
+        setActiveUsers(current.active_users);
+      } catch {
+        // Keep last known value.
+      }
+    };
+
+    void refreshPresence();
+    const intervalId = window.setInterval(() => {
+      void refreshPresence();
+    }, PRESENCE_REFRESH_MS);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 
