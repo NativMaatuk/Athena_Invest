@@ -12,6 +12,7 @@ import {
 
 const PRESENCE_REFRESH_MS = 45_000;
 const PRESENCE_STORAGE_KEY = "athena-presence-session-id";
+const DRAG_START_THRESHOLD_PX = 8;
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value == null || !Number.isFinite(value)) {
@@ -190,11 +191,15 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
 
     let rafId = 0;
     let running = true;
-    let loopWidth = firstGroup.getBoundingClientRect().width;
+    let loopWidth = 0;
     let offsetX = 0;
     let lastFrameTs = performance.now();
     let isDragging = false;
+    let isHorizontalDrag = false;
     let pointerId: number | null = null;
+    let hasPointerCapture = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
     let lastPointerX = 0;
     let lastPointerTs = 0;
     let inertialVelocity = 0;
@@ -212,7 +217,8 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
     reducedMotionQuery.addEventListener("change", onReducedMotionChange);
 
     const normalizeOffset = () => {
-      if (loopWidth <= 0) {
+      if (loopWidth <= 1 || !Number.isFinite(loopWidth)) {
+        offsetX = 0;
         return;
       }
       while (offsetX <= -loopWidth) {
@@ -229,6 +235,12 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
 
     const recalcWidth = () => {
       loopWidth = firstGroup.getBoundingClientRect().width;
+      if (loopWidth <= 1 || !Number.isFinite(loopWidth)) {
+        offsetX = 0;
+        inertialVelocity = 0;
+        draw();
+        return;
+      }
       normalizeOffset();
       draw();
     };
@@ -239,7 +251,9 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
 
     const stopDrag = () => {
       isDragging = false;
+      isHorizontalDrag = false;
       pointerId = null;
+      hasPointerCapture = false;
       track.classList.remove("is-dragging");
       if (reducedMotion) {
         inertialVelocity = 0;
@@ -247,24 +261,48 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
     };
 
     const onPointerDown = (event: PointerEvent) => {
-      event.preventDefault();
       pointerId = event.pointerId;
       isDragging = true;
+      isHorizontalDrag = false;
       inertialVelocity = 0;
+      dragStartX = event.clientX;
+      dragStartY = event.clientY;
       lastPointerX = event.clientX;
       lastPointerTs = performance.now();
-      track.classList.add("is-dragging");
-      track.setPointerCapture(event.pointerId);
     };
 
     const onPointerMove = (event: PointerEvent) => {
       if (!isDragging || pointerId !== event.pointerId) {
         return;
       }
+
+      const totalDeltaX = event.clientX - dragStartX;
+      const totalDeltaY = event.clientY - dragStartY;
+      if (!isHorizontalDrag) {
+        const horizontalPastThreshold = Math.abs(totalDeltaX) >= DRAG_START_THRESHOLD_PX;
+        const horizontalDominant = Math.abs(totalDeltaX) > Math.abs(totalDeltaY);
+        if (!horizontalPastThreshold || !horizontalDominant) {
+          if (Math.abs(totalDeltaY) >= DRAG_START_THRESHOLD_PX && Math.abs(totalDeltaY) > Math.abs(totalDeltaX)) {
+            stopDrag();
+          }
+          return;
+        }
+        isHorizontalDrag = true;
+        track.classList.add("is-dragging");
+        if (!hasPointerCapture) {
+          track.setPointerCapture(event.pointerId);
+          hasPointerCapture = true;
+        }
+      }
+
+      if (event.cancelable) {
+        event.preventDefault();
+      }
       const now = performance.now();
       const deltaX = event.clientX - lastPointerX;
       const deltaT = Math.max(8, now - lastPointerTs);
       offsetX += deltaX;
+      normalizeOffset();
       inertialVelocity = (deltaX / deltaT) * 1000;
       lastPointerX = event.clientX;
       lastPointerTs = now;
@@ -275,7 +313,9 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       if (pointerId !== event.pointerId) {
         return;
       }
-      track.releasePointerCapture(event.pointerId);
+      if (hasPointerCapture) {
+        track.releasePointerCapture(event.pointerId);
+      }
       stopDrag();
     };
 
@@ -292,12 +332,29 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       }
     };
 
+    const onWindowResize = () => {
+      recalcWidth();
+    };
+
+    const visualViewport = window.visualViewport;
+    const onVisualViewportResize = () => {
+      recalcWidth();
+    };
+
     const tick = (now: number) => {
       if (!running) {
         return;
       }
       const dt = Math.min(34, now - lastFrameTs) / 1000;
       lastFrameTs = now;
+
+      if (loopWidth <= 1 || !Number.isFinite(loopWidth)) {
+        offsetX = 0;
+        inertialVelocity = 0;
+        draw();
+        rafId = window.requestAnimationFrame(tick);
+        return;
+      }
 
       if (!isDragging) {
         normalizeOffset();
@@ -323,6 +380,8 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
     track.addEventListener("pointercancel", onPointerCancel);
     track.addEventListener("lostpointercapture", stopDrag);
     window.addEventListener("blur", onWindowBlur);
+    window.addEventListener("resize", onWindowResize);
+    visualViewport?.addEventListener("resize", onVisualViewportResize);
     rafId = window.requestAnimationFrame(tick);
 
     return () => {
@@ -335,9 +394,11 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       track.removeEventListener("pointercancel", onPointerCancel);
       track.removeEventListener("lostpointercapture", stopDrag);
       window.removeEventListener("blur", onWindowBlur);
+      window.removeEventListener("resize", onWindowResize);
+      visualViewport?.removeEventListener("resize", onVisualViewportResize);
       reducedMotionQuery.removeEventListener("change", onReducedMotionChange);
     };
-  }, [snapshot]);
+  }, []);
 
   const marketItems = (
     <>

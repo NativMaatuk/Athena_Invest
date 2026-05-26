@@ -44,7 +44,7 @@ a {
   will-change: transform;
   user-select: none;
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .market-marquee-track.is-dragging {
@@ -108,7 +108,9 @@ body.theme-light {
   color: var(--athena-text);
   position: relative;
   isolation: isolate;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .athena-page::before,
@@ -258,6 +260,14 @@ body.theme-light {
 .athena-topbar {
   border-color: color-mix(in srgb, var(--athena-accent) 35%, transparent) !important;
   background: color-mix(in srgb, var(--athena-card-bg) 90%, transparent) !important;
+}
+
+@media (max-width: 768px) {
+  .athena-topbar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--athena-card-bg) !important;
+  }
 }
 
 .athena-marquee-divider::after {
