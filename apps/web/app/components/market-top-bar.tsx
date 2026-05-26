@@ -88,6 +88,7 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
   const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
   const [activeUsers, setActiveUsers] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const marqueeViewportRef = useRef<HTMLDivElement | null>(null);
   const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
   const marqueeGroupRef = useRef<HTMLDivElement | null>(null);
 
@@ -183,14 +184,16 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
   }, []);
 
   useEffect(() => {
+    const viewport = marqueeViewportRef.current;
     const track = marqueeTrackRef.current;
     const firstGroup = marqueeGroupRef.current;
-    if (!track || !firstGroup) {
+    if (!viewport || !track || !firstGroup) {
       return;
     }
 
     let rafId = 0;
     let running = true;
+    let viewportWidth = 0;
     let loopWidth = 0;
     let offsetX = 0;
     let lastFrameTs = performance.now();
@@ -216,38 +219,34 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
     onReducedMotionChange();
     reducedMotionQuery.addEventListener("change", onReducedMotionChange);
 
-    const normalizeOffset = () => {
-      if (loopWidth <= 1 || !Number.isFinite(loopWidth)) {
-        offsetX = 0;
-        return;
-      }
-      while (offsetX <= -loopWidth) {
-        offsetX += loopWidth;
-      }
-      while (offsetX > 0) {
-        offsetX -= loopWidth;
-      }
-    };
-
     const draw = () => {
       track.style.transform = `translate3d(${offsetX}px, 0, 0)`;
     };
 
-    const recalcWidth = () => {
-      loopWidth = firstGroup.getBoundingClientRect().width;
-      if (loopWidth <= 1 || !Number.isFinite(loopWidth)) {
+    const recalcDimensions = () => {
+      viewportWidth = Math.ceil(viewport.getBoundingClientRect().width);
+      const groupRect = firstGroup.getBoundingClientRect();
+      loopWidth = Math.max(firstGroup.offsetWidth, Math.ceil(groupRect.width));
+      if (loopWidth <= 1 || !Number.isFinite(loopWidth) || viewportWidth <= 1 || !Number.isFinite(viewportWidth)) {
         offsetX = 0;
         inertialVelocity = 0;
         draw();
         return;
       }
-      normalizeOffset();
+      if (offsetX < -loopWidth || offsetX > viewportWidth) {
+        offsetX = viewportWidth;
+      }
       draw();
     };
 
-    const groupResizeObserver = new ResizeObserver(recalcWidth);
+    const groupResizeObserver = new ResizeObserver(recalcDimensions);
     groupResizeObserver.observe(firstGroup);
-    recalcWidth();
+    groupResizeObserver.observe(viewport);
+    recalcDimensions();
+    if (viewportWidth > 1) {
+      offsetX = viewportWidth;
+      draw();
+    }
 
     const stopDrag = () => {
       isDragging = false;
@@ -302,7 +301,11 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       const deltaX = event.clientX - lastPointerX;
       const deltaT = Math.max(8, now - lastPointerTs);
       offsetX += deltaX;
-      normalizeOffset();
+      if (loopWidth > 1 && Number.isFinite(loopWidth) && viewportWidth > 1 && Number.isFinite(viewportWidth)) {
+        if (offsetX <= -loopWidth || offsetX > viewportWidth) {
+          offsetX = viewportWidth;
+        }
+      }
       inertialVelocity = (deltaX / deltaT) * 1000;
       lastPointerX = event.clientX;
       lastPointerTs = now;
@@ -333,12 +336,17 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
     };
 
     const onWindowResize = () => {
-      recalcWidth();
+      recalcDimensions();
     };
 
     const visualViewport = window.visualViewport;
     const onVisualViewportResize = () => {
-      recalcWidth();
+      recalcDimensions();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        recalcDimensions();
+      }
     };
 
     const tick = (now: number) => {
@@ -348,7 +356,7 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       const dt = Math.min(34, now - lastFrameTs) / 1000;
       lastFrameTs = now;
 
-      if (loopWidth <= 1 || !Number.isFinite(loopWidth)) {
+      if (loopWidth <= 1 || !Number.isFinite(loopWidth) || viewportWidth <= 1 || !Number.isFinite(viewportWidth)) {
         offsetX = 0;
         inertialVelocity = 0;
         draw();
@@ -357,7 +365,6 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       }
 
       if (!isDragging) {
-        normalizeOffset();
         if (Math.abs(inertialVelocity) > 8 && !reducedMotion) {
           offsetX += inertialVelocity * dt;
           inertialVelocity *= Math.pow(0.9, dt * 60);
@@ -368,8 +375,11 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
           }
         }
       }
-
-      normalizeOffset();
+      if (offsetX <= -loopWidth) {
+        offsetX = viewportWidth;
+      } else if (offsetX > viewportWidth) {
+        offsetX = viewportWidth;
+      }
       draw();
       rafId = window.requestAnimationFrame(tick);
     };
@@ -382,6 +392,7 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
     window.addEventListener("blur", onWindowBlur);
     window.addEventListener("resize", onWindowResize);
     visualViewport?.addEventListener("resize", onVisualViewportResize);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     rafId = window.requestAnimationFrame(tick);
 
     return () => {
@@ -396,6 +407,7 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
       window.removeEventListener("blur", onWindowBlur);
       window.removeEventListener("resize", onWindowResize);
       visualViewport?.removeEventListener("resize", onVisualViewportResize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       reducedMotionQuery.removeEventListener("change", onReducedMotionChange);
     };
   }, []);
@@ -425,12 +437,9 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
 
   return (
     <section className="sticky top-0 z-30 mb-4 rounded-xl border px-3 py-2 shadow-lg backdrop-blur athena-card athena-topbar">
-      <div className="market-marquee text-xs sm:text-sm" aria-label="market ticker draggable">
+      <div ref={marqueeViewportRef} className="market-marquee text-xs sm:text-sm" aria-label="market ticker draggable">
         <div ref={marqueeTrackRef} className="market-marquee-track">
           <div ref={marqueeGroupRef} className="market-marquee-group athena-marquee-divider">
-            {marketItems}
-          </div>
-          <div className="market-marquee-group athena-marquee-divider" aria-hidden="true">
             {marketItems}
           </div>
         </div>

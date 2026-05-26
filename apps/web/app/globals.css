@@ -36,15 +36,18 @@ a {
 .market-marquee {
   overflow: hidden;
   white-space: nowrap;
+  direction: ltr;
 }
 
 .market-marquee-track {
   display: flex;
+  flex-direction: row;
   width: max-content;
   will-change: transform;
   user-select: none;
   cursor: grab;
   touch-action: pan-y;
+  direction: ltr;
 }
 
 .market-marquee-track.is-dragging {
@@ -54,9 +57,11 @@ a {
 .market-marquee-group {
   display: inline-flex;
   align-items: center;
-  min-width: 100%;
+  flex: 0 0 auto;
+  width: max-content;
   gap: 1.25rem;
   padding-inline: 0.625rem;
+  direction: rtl;
 }
 
 .market-marquee-group > *:not(:last-child)::after {
