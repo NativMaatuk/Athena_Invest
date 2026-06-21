@@ -16,6 +16,13 @@ def _to_int(name: str, default: int) -> int:
         return default
 
 
+def _to_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class ApiSettings:
     host: str
@@ -28,6 +35,8 @@ class ApiSettings:
     rate_limit_window_seconds: int
     rate_limit_analysis_requests: int
     rate_limit_chat_requests: int
+    database_url: str | None
+    enable_internal_schedulers: bool
     market_snapshot_refresh_interval_seconds: int
     watchlist_db_path: str
     watchlist_max_items: int
@@ -51,6 +60,8 @@ class ApiSettings:
             rate_limit_window_seconds=_to_int("WEB_API_RATE_LIMIT_WINDOW_SECONDS", 60),
             rate_limit_analysis_requests=_to_int("WEB_API_RATE_LIMIT_ANALYSIS_REQUESTS", 20),
             rate_limit_chat_requests=_to_int("WEB_API_RATE_LIMIT_CHAT_REQUESTS", 12),
+            database_url=os.getenv("DATABASE_URL"),
+            enable_internal_schedulers=_to_bool("WEB_API_ENABLE_INTERNAL_SCHEDULERS", True),
             market_snapshot_refresh_interval_seconds=_to_int("WEB_API_MARKET_REFRESH_INTERVAL_SECONDS", 300),
             watchlist_db_path=os.getenv("WEB_API_WATCHLIST_DB_PATH", "data/watchlist.db"),
             watchlist_max_items=_to_int("WEB_API_WATCHLIST_MAX_ITEMS", 5),

@@ -14,6 +14,7 @@ from .services.perplexity_client import PerplexityClient
 from .services.watchlist_service import WatchlistService
 from .services.watchlist_scheduler import WatchlistScheduler
 from .storage.watchlist_store import WatchlistStore
+from .storage.watchlist_store_postgres import PostgresWatchlistStore
 
 
 @lru_cache(maxsize=1)
@@ -57,7 +58,10 @@ def get_active_users_service() -> ActiveUsersService:
 
 @lru_cache(maxsize=1)
 def get_watchlist_store() -> WatchlistStore:
-    return WatchlistStore(get_settings().watchlist_db_path)
+    settings = get_settings()
+    if settings.database_url:
+        return PostgresWatchlistStore(settings.database_url)  # type: ignore[return-value]
+    return WatchlistStore(settings.watchlist_db_path)
 
 
 @lru_cache(maxsize=1)

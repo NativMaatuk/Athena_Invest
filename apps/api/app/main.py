@@ -30,6 +30,9 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        if not settings.enable_internal_schedulers:
+            yield
+            return
         watchlist_scheduler = get_watchlist_scheduler()
         market_scheduler = get_market_snapshot_scheduler()
         watchlist_scheduler.start()
