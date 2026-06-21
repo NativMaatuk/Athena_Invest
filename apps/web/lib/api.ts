@@ -67,6 +67,65 @@ export type ActiveUsersPayload = {
   window_seconds: number;
 };
 
+export type WatchlistHolder = {
+  name: string;
+  pct_out?: number | null;
+  pct_out_text?: string | null;
+  shares?: string | null;
+  value?: string | null;
+};
+
+export type WatchlistSnapshot = {
+  id: number;
+  ticker: string;
+  captured_at: string;
+  institutional_pct?: number | null;
+  insider_pct?: number | null;
+  volume_today?: number | null;
+  avg_volume_30d?: number | null;
+  relative_volume?: number | null;
+  top_holders: WatchlistHolder[];
+  fetch_status: string;
+  error_message?: string | null;
+};
+
+export type WatchlistTickerItem = {
+  ticker: string;
+  added_at: string;
+  last_refreshed_at?: string | null;
+  is_degraded: boolean;
+  last_error?: string | null;
+  latest_snapshot?: WatchlistSnapshot | null;
+};
+
+export type WatchlistListResponse = {
+  max_items: number;
+  last_refresh_at?: string | null;
+  items: WatchlistTickerItem[];
+};
+
+export type WatchlistEvent = {
+  id: number;
+  ticker: string;
+  event_type: string;
+  severity: "low" | "medium" | "high";
+  message: string;
+  holder_name?: string | null;
+  change_pct?: number | null;
+  relative_volume?: number | null;
+  anomaly_score?: number | null;
+  created_at: string;
+};
+
+export type WatchlistHistoryResponse = {
+  ticker: string;
+  snapshots: WatchlistSnapshot[];
+};
+
+export type WatchlistEventsResponse = {
+  events: WatchlistEvent[];
+};
+
 type ApiErrorEnvelope = {
   error?: {
     code?: string;
@@ -239,4 +298,87 @@ export async function askPerplexity(
     );
   }
   return parseOrThrow<ChatResponse>(response);
+}
+
+export async function fetchWatchlist(): Promise<WatchlistListResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/watchlist`, {
+      method: "GET",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן לטעון את רשימת המעקב כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<WatchlistListResponse>(response);
+}
+
+export async function addWatchlistTicker(ticker: string): Promise<WatchlistListResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/watchlist`, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticker }),
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן להוסיף מניה לרשימת המעקב כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<WatchlistListResponse>(response);
+}
+
+export async function removeWatchlistTicker(ticker: string): Promise<WatchlistListResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/watchlist/${encodeURIComponent(ticker)}`, {
+      method: "DELETE",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן להסיר מניה מרשימת המעקב כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<WatchlistListResponse>(response);
+}
+
+export async function fetchWatchlistHistory(ticker: string, hours = 168): Promise<WatchlistHistoryResponse> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${API_BASE}/api/v1/watchlist/${encodeURIComponent(ticker)}/history?hours=${encodeURIComponent(String(hours))}`,
+      {
+        method: "GET",
+        cache: "no-store",
+      },
+    );
+  } catch {
+    throw new ApiClientError("לא ניתן לטעון היסטוריית אחזקות כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<WatchlistHistoryResponse>(response);
+}
+
+export async function fetchWatchlistEvents(limit = 50): Promise<WatchlistEventsResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/watchlist/events/feed?limit=${encodeURIComponent(String(limit))}`, {
+      method: "GET",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן לטעון אירועי מעקב כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<WatchlistEventsResponse>(response);
+}
+
+export async function refreshWatchlist(): Promise<{ refreshed: number; failures: number; events_created: number }> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/v1/watchlist/refresh`, {
+      method: "POST",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiClientError("לא ניתן לרענן את רשימת המעקב כרגע.", "NETWORK_ERROR");
+  }
+  return parseOrThrow<{ refreshed: number; failures: number; events_created: number }>(response);
 }

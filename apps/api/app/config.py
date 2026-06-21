@@ -28,6 +28,12 @@ class ApiSettings:
     rate_limit_window_seconds: int
     rate_limit_analysis_requests: int
     rate_limit_chat_requests: int
+    market_snapshot_refresh_interval_seconds: int
+    watchlist_db_path: str
+    watchlist_max_items: int
+    watchlist_refresh_interval_seconds: int
+    watchlist_significant_change_pct: int
+    watchlist_degraded_failure_threshold: int
 
     @classmethod
     def from_env(cls) -> "ApiSettings":
@@ -45,4 +51,10 @@ class ApiSettings:
             rate_limit_window_seconds=_to_int("WEB_API_RATE_LIMIT_WINDOW_SECONDS", 60),
             rate_limit_analysis_requests=_to_int("WEB_API_RATE_LIMIT_ANALYSIS_REQUESTS", 20),
             rate_limit_chat_requests=_to_int("WEB_API_RATE_LIMIT_CHAT_REQUESTS", 12),
+            market_snapshot_refresh_interval_seconds=_to_int("WEB_API_MARKET_REFRESH_INTERVAL_SECONDS", 300),
+            watchlist_db_path=os.getenv("WEB_API_WATCHLIST_DB_PATH", "data/watchlist.db"),
+            watchlist_max_items=_to_int("WEB_API_WATCHLIST_MAX_ITEMS", 5),
+            watchlist_refresh_interval_seconds=_to_int("WEB_API_WATCHLIST_REFRESH_INTERVAL_SECONDS", 3600),
+            watchlist_significant_change_pct=_to_int("WEB_API_WATCHLIST_SIGNIFICANT_CHANGE_PCT", 5),
+            watchlist_degraded_failure_threshold=_to_int("WEB_API_WATCHLIST_DEGRADED_FAILURE_THRESHOLD", 3),
         )

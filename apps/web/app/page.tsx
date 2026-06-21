@@ -200,6 +200,7 @@ export default function HomePage() {
     };
   }, [analysis, chartMode]);
 
+
   async function onTickerInputChange(value: string) {
     setTickerInput(value);
     if (!value.trim()) {

@@ -61,6 +61,14 @@ class MarketSnapshotService:
             self._cached_until = now + timedelta(seconds=self._cache_ttl)
             return snapshot
 
+    async def refresh_snapshot(self) -> MarketSnapshot:
+        async with self._lock:
+            snapshot = await asyncio.to_thread(self._build_snapshot)
+            now = datetime.now(timezone.utc)
+            self._cached_snapshot = snapshot
+            self._cached_until = now + timedelta(seconds=self._cache_ttl)
+            return snapshot
+
     def _build_snapshot(self) -> MarketSnapshot:
         usd_ils, usd_ils_change_pct = self._fetch_quote_with_change("USDILS=X")
         vix, vix_change_pct = self._fetch_quote_with_change("^VIX")

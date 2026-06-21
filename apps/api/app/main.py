@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import uuid
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from src.shared.errors import ExternalServiceError, RequestTimeoutError, TickerNotFoundError, ValidationError
 
-from .dependencies import get_settings
+from .dependencies import get_market_snapshot_scheduler, get_settings, get_watchlist_scheduler
 from .error_handlers import (
     external_error_handler,
     http_exception_handler,
@@ -21,14 +22,29 @@ from .routers.health import router as health_router
 from .routers.market import router as market_router
 from .routers.presence import router as presence_router
 from .routers.ticker import router as ticker_router
+from .routers.watchlist import router as watchlist_router
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        watchlist_scheduler = get_watchlist_scheduler()
+        market_scheduler = get_market_snapshot_scheduler()
+        watchlist_scheduler.start()
+        market_scheduler.start()
+        try:
+            yield
+        finally:
+            await watchlist_scheduler.stop()
+            await market_scheduler.stop()
+
     app = FastAPI(
         title="Athena Invest Web API",
         version="0.1.0",
         description="Web API for ticker analysis, chart rendering and Perplexity chat.",
+        lifespan=lifespan,
     )
 
     @app.middleware("http")
@@ -58,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(analysis_router)
     app.include_router(ticker_router)
     app.include_router(chat_router)
+    app.include_router(watchlist_router)
     return app
 
 

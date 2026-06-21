@@ -9,7 +9,11 @@ from .rate_limit import InMemoryRateLimiter
 from .services.active_users_service import ActiveUsersService
 from .services.analysis_runtime import AnalysisRuntime
 from .services.market_snapshot import MarketSnapshotService
+from .services.market_snapshot_scheduler import MarketSnapshotScheduler
 from .services.perplexity_client import PerplexityClient
+from .services.watchlist_service import WatchlistService
+from .services.watchlist_scheduler import WatchlistScheduler
+from .storage.watchlist_store import WatchlistStore
 
 
 @lru_cache(maxsize=1)
@@ -38,8 +42,42 @@ def get_market_snapshot_service() -> MarketSnapshotService:
 
 
 @lru_cache(maxsize=1)
+def get_market_snapshot_scheduler() -> MarketSnapshotScheduler:
+    settings = get_settings()
+    return MarketSnapshotScheduler(
+        service=get_market_snapshot_service(),
+        interval_seconds=settings.market_snapshot_refresh_interval_seconds,
+    )
+
+
+@lru_cache(maxsize=1)
 def get_active_users_service() -> ActiveUsersService:
     return ActiveUsersService(window_seconds=300)
+
+
+@lru_cache(maxsize=1)
+def get_watchlist_store() -> WatchlistStore:
+    return WatchlistStore(get_settings().watchlist_db_path)
+
+
+@lru_cache(maxsize=1)
+def get_watchlist_service() -> WatchlistService:
+    settings = get_settings()
+    return WatchlistService(
+        store=get_watchlist_store(),
+        max_items=settings.watchlist_max_items,
+        significant_change_pct=settings.watchlist_significant_change_pct,
+        degraded_failure_threshold=settings.watchlist_degraded_failure_threshold,
+    )
+
+
+@lru_cache(maxsize=1)
+def get_watchlist_scheduler() -> WatchlistScheduler:
+    settings = get_settings()
+    return WatchlistScheduler(
+        service=get_watchlist_service(),
+        interval_seconds=settings.watchlist_refresh_interval_seconds,
+    )
 
 
 def enforce_rate_limit(request: Request, *, bucket: str, limit: int) -> None:

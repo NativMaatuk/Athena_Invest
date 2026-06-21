@@ -108,3 +108,72 @@ class PerplexityChatResponse(BaseModel):
     model: str
     answer: str
     citations: list[PerplexityCitation]
+
+
+class WatchlistAddRequest(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+
+
+class WatchlistHolder(BaseModel):
+    name: str
+    pct_out: float | None = None
+    pct_out_text: str | None = None
+    shares: str | None = None
+    value: str | None = None
+
+
+class WatchlistSnapshot(BaseModel):
+    id: int
+    ticker: str
+    captured_at: str
+    institutional_pct: float | None = None
+    insider_pct: float | None = None
+    volume_today: float | None = None
+    avg_volume_30d: float | None = None
+    relative_volume: float | None = None
+    top_holders: list[WatchlistHolder]
+    fetch_status: str
+    error_message: str | None = None
+
+
+class WatchlistTickerItem(BaseModel):
+    ticker: str
+    added_at: str
+    last_refreshed_at: str | None = None
+    is_degraded: bool = False
+    last_error: str | None = None
+    latest_snapshot: WatchlistSnapshot | None = None
+
+
+class WatchlistListResponse(BaseModel):
+    max_items: int
+    last_refresh_at: str | None = None
+    items: list[WatchlistTickerItem]
+
+
+class WatchlistHistoryResponse(BaseModel):
+    ticker: str
+    snapshots: list[WatchlistSnapshot]
+
+
+class WatchlistEvent(BaseModel):
+    id: int
+    ticker: str
+    event_type: str
+    severity: str
+    message: str
+    holder_name: str | None = None
+    change_pct: float | None = None
+    relative_volume: float | None = None
+    anomaly_score: int | None = None
+    created_at: str
+
+
+class WatchlistEventsResponse(BaseModel):
+    events: list[WatchlistEvent]
+
+
+class WatchlistRefreshResponse(BaseModel):
+    refreshed: int
+    failures: int
+    events_created: int
