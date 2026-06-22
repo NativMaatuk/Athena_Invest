@@ -177,7 +177,7 @@ export function InteractivePriceChart({
     const initialMainHeight = getChartHeight(initialWidth, sizeMode);
     const initialRsiHeight = getRsiHeight(sizeMode);
     const chart = createChart(container, {
-      autoSize: true,
+      autoSize: false,
       width: initialWidth,
       height: initialMainHeight,
       layout: {
@@ -363,7 +363,7 @@ export function InteractivePriceChart({
     let cleanupRangeSync: (() => void) | null = null;
     if (mode === "full" && rsiData.length > 0 && rsiContainerRef.current) {
       const rsiChart = createChart(rsiContainerRef.current, {
-        autoSize: true,
+        autoSize: false,
         width: Math.max(320, rsiContainerRef.current.clientWidth),
         height: initialRsiHeight,
         layout: {

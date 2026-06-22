@@ -43,6 +43,7 @@ class ApiSettings:
     watchlist_refresh_interval_seconds: int
     watchlist_significant_change_pct: int
     watchlist_degraded_failure_threshold: int
+    watchlist_retention_days: int
 
     @classmethod
     def from_env(cls) -> "ApiSettings":
@@ -60,7 +61,7 @@ class ApiSettings:
             rate_limit_window_seconds=_to_int("WEB_API_RATE_LIMIT_WINDOW_SECONDS", 60),
             rate_limit_analysis_requests=_to_int("WEB_API_RATE_LIMIT_ANALYSIS_REQUESTS", 20),
             rate_limit_chat_requests=_to_int("WEB_API_RATE_LIMIT_CHAT_REQUESTS", 12),
-            database_url=os.getenv("DATABASE_URL"),
+            database_url=os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL"),
             enable_internal_schedulers=_to_bool("WEB_API_ENABLE_INTERNAL_SCHEDULERS", True),
             market_snapshot_refresh_interval_seconds=_to_int("WEB_API_MARKET_REFRESH_INTERVAL_SECONDS", 300),
             watchlist_db_path=os.getenv("WEB_API_WATCHLIST_DB_PATH", "data/watchlist.db"),
@@ -68,4 +69,5 @@ class ApiSettings:
             watchlist_refresh_interval_seconds=_to_int("WEB_API_WATCHLIST_REFRESH_INTERVAL_SECONDS", 3600),
             watchlist_significant_change_pct=_to_int("WEB_API_WATCHLIST_SIGNIFICANT_CHANGE_PCT", 5),
             watchlist_degraded_failure_threshold=_to_int("WEB_API_WATCHLIST_DEGRADED_FAILURE_THRESHOLD", 3),
+            watchlist_retention_days=_to_int("WEB_API_WATCHLIST_RETENTION_DAYS", 90),
         )

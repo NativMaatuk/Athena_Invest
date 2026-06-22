@@ -72,6 +72,7 @@ def get_watchlist_service() -> WatchlistService:
         max_items=settings.watchlist_max_items,
         significant_change_pct=settings.watchlist_significant_change_pct,
         degraded_failure_threshold=settings.watchlist_degraded_failure_threshold,
+        retention_days=settings.watchlist_retention_days,
     )
 
 

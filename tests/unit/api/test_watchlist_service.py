@@ -11,6 +11,7 @@ def build_service(tmp_path) -> WatchlistService:
         max_items=5,
         significant_change_pct=5,
         degraded_failure_threshold=3,
+        retention_days=90,
     )
 
 

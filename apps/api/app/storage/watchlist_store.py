@@ -251,3 +251,15 @@ class WatchlistStore:
                 "SELECT MAX(last_refreshed_at) AS latest FROM watchlist_tickers"
             ).fetchone()
         return row["latest"] if row and row["latest"] else None
+
+    def prune_old_data(self, retention_days: int) -> None:
+        days = max(1, int(retention_days))
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "DELETE FROM watchlist_snapshots WHERE captured_at < datetime('now', ?)",
+                (f"-{days} days",),
+            )
+            conn.execute(
+                "DELETE FROM watchlist_events WHERE created_at < datetime('now', ?)",
+                (f"-{days} days",),
+            )

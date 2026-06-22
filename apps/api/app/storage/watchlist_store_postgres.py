@@ -307,3 +307,16 @@ class PostgresWatchlistStore:
         if not row:
             return None
         return self._to_iso(row.get("latest"))
+
+    def prune_old_data(self, retention_days: int) -> None:
+        days = max(1, int(retention_days))
+        with self._lock, self._connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM watchlist_snapshots WHERE captured_at < (NOW() - (%s * INTERVAL '1 day'))",
+                (days,),
+            )
+            cur.execute(
+                "DELETE FROM watchlist_events WHERE created_at < (NOW() - (%s * INTERVAL '1 day'))",
+                (days,),
+            )
+            conn.commit()

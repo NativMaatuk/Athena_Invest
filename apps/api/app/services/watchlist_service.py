@@ -25,11 +25,13 @@ class WatchlistService:
         max_items: int,
         significant_change_pct: float,
         degraded_failure_threshold: int,
+        retention_days: int,
     ):
         self._store = store
         self._max_items = max_items
         self._significant_change_pct = max(0.5, float(significant_change_pct))
         self._degraded_failure_threshold = max(1, int(degraded_failure_threshold))
+        self._retention_days = max(1, int(retention_days))
 
     @property
     def max_items(self) -> int:
@@ -80,6 +82,7 @@ class WatchlistService:
         return events
 
     def refresh_watchlist(self) -> RefreshSummary:
+        self._store.prune_old_data(self._retention_days)
         tickers = [item["ticker"] for item in self._store.list_tickers()]
         refreshed = 0
         failures = 0
