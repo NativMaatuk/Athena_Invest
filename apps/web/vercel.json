@@ -3,11 +3,11 @@
   "crons": [
     {
       "path": "/api/cron/watchlist-refresh",
-      "schedule": "0 * * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/market-refresh",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 10 * * *"
     }
   ]
 }
