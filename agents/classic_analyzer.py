@@ -122,12 +122,17 @@ class ClassicAnalyzer:
         # Get the last row (most recent data)
         last_row = df.iloc[-1]
         current_price = last_row['Close']
+        previous_close = df.iloc[-2]['Close'] if len(df) >= 2 else None
         sma_150 = last_row['SMA_150']
         
         # Check if we have valid SMA_150
         if pd.isna(sma_150):
             raise ValueError("SMA_150 is not available - insufficient historical data")
         
+        daily_change_pct = None
+        if previous_close is not None and pd.notna(previous_close) and previous_close != 0:
+            daily_change_pct = ((current_price - previous_close) / previous_close) * 100
+
         # Determine trend (main direction)
         is_positive = current_price > sma_150
         
@@ -177,6 +182,8 @@ class ClassicAnalyzer:
             'ticker': None,  # Will be set by caller
             'is_positive': is_positive,
             'current_price': current_price,
+            'previous_close': previous_close,
+            'daily_change_pct': daily_change_pct,
             'sma_150': sma_150,
             'sma_slope': sma_slope,
             'distance_from_sma': distance_from_sma,

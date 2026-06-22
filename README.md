@@ -39,6 +39,28 @@ One-shot Fear & Greed publish:
 python fear_and_greed_monitor.py
 ```
 
+## Web MVP (new folder split)
+
+Backend API (`apps/api`):
+
+```bash
+pip install -r requirements.txt
+pip install -r apps/api/requirements.txt
+python -m apps.api.run
+```
+
+Frontend (`apps/web`):
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+Web API docs and health:
+- `http://localhost:8000/docs`
+- `http://localhost:8000/health`
+
 ## Oracle Cloud container run
 
 Build:

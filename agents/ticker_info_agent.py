@@ -76,12 +76,13 @@ class TickerInfoAgent:
         """Extract normalized institutional/insider ownership data when available."""
         institutional_pct = self._normalize_ratio_to_pct(info.get('heldPercentInstitutions'))
         insider_pct = self._normalize_ratio_to_pct(info.get('heldPercentInsiders'))
+        shares_outstanding = self._safe_float(info.get('sharesOutstanding'))
 
         holders: list[Dict[str, str]] = []
         try:
             institutional_holders = ticker_obj.institutional_holders
             if isinstance(institutional_holders, pd.DataFrame) and not institutional_holders.empty:
-                holders = self._normalize_holders(institutional_holders)
+                holders = self._normalize_holders(institutional_holders, shares_outstanding=shares_outstanding)
         except Exception:
             holders = []
 
@@ -111,7 +112,13 @@ class TickerInfoAgent:
         except (TypeError, ValueError):
             return None
 
-    def _normalize_holders(self, holders_df: pd.DataFrame, max_holders: int = 5) -> list[Dict[str, str]]:
+    def _normalize_holders(
+        self,
+        holders_df: pd.DataFrame,
+        *,
+        shares_outstanding: Optional[float],
+        max_holders: int = 5,
+    ) -> list[Dict[str, str]]:
         """Normalize holders dataframe into compact display-ready records."""
         normalized: list[Dict[str, str]] = []
         if holders_df is None or holders_df.empty:
@@ -132,6 +139,9 @@ class TickerInfoAgent:
 
             pct_raw = row.get('% Out')
             pct = self._normalize_ratio_to_pct(pct_raw)
+            shares_numeric = self._safe_float(row.get('Shares'))
+            if pct is None and shares_numeric and shares_outstanding and shares_outstanding > 0:
+                pct = (shares_numeric / shares_outstanding) * 100
             if pct is not None:
                 holder_item['pct_out'] = f"{pct:.2f}%"
 
@@ -153,6 +163,13 @@ class TickerInfoAgent:
             if numeric >= 1_000:
                 return f"{numeric / 1_000:.2f}K"
             return f"{numeric:.0f}"
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _safe_float(value: Any) -> Optional[float]:
+        try:
+            return float(value) if value is not None else None
         except (TypeError, ValueError):
             return None
 

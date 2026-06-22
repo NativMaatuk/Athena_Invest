@@ -3,3 +3,11 @@
 *.env
 __pycache__/
 *.pyc
+node_modules/
+.next/
+
+# Local runtime artifacts
+data/*.db
+
+# Personal IDE launch overrides
+.vscode/launch.json
