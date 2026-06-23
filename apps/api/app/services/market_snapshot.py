@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
 import requests
 import yfinance as yf
+
+from .market_hours import market_refresh_interval_seconds
 
 
 def _to_float(value) -> float | None:
@@ -40,11 +42,25 @@ class MarketSnapshotService:
             "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
     }
-    def __init__(self, cache_ttl_seconds: int = 300):
-        self._cache_ttl = max(60, cache_ttl_seconds)
+    def __init__(
+        self,
+        *,
+        market_hours_ttl_seconds: int = 120,
+        off_hours_ttl_seconds: int = 900,
+    ):
+        self._market_hours_ttl_seconds = max(30, int(market_hours_ttl_seconds))
+        self._off_hours_ttl_seconds = max(30, int(off_hours_ttl_seconds))
         self._cached_snapshot: MarketSnapshot | None = None
+        self._last_known_good_snapshot: MarketSnapshot | None = None
         self._cached_until: datetime = datetime.min.replace(tzinfo=timezone.utc)
         self._lock = asyncio.Lock()
+
+    def refresh_interval_seconds(self, now: datetime | None = None) -> int:
+        return market_refresh_interval_seconds(
+            market_hours_seconds=self._market_hours_ttl_seconds,
+            off_hours_seconds=self._off_hours_ttl_seconds,
+            now_utc=now,
+        )
 
     async def get_snapshot(self) -> MarketSnapshot:
         now = datetime.now(timezone.utc)
@@ -57,17 +73,23 @@ class MarketSnapshotService:
                 return self._cached_snapshot
 
             snapshot = await asyncio.to_thread(self._build_snapshot)
-            self._cached_snapshot = snapshot
-            self._cached_until = now + timedelta(seconds=self._cache_ttl)
-            return snapshot
+            usable_snapshot = self._select_usable_snapshot(snapshot)
+            ttl_seconds = self.refresh_interval_seconds(now)
+            with_ttl = self._snapshot_with_cache_ttl(usable_snapshot, ttl_seconds=ttl_seconds)
+            self._cached_snapshot = with_ttl
+            self._cached_until = now + timedelta(seconds=ttl_seconds)
+            return with_ttl
 
     async def refresh_snapshot(self) -> MarketSnapshot:
         async with self._lock:
             snapshot = await asyncio.to_thread(self._build_snapshot)
             now = datetime.now(timezone.utc)
-            self._cached_snapshot = snapshot
-            self._cached_until = now + timedelta(seconds=self._cache_ttl)
-            return snapshot
+            usable_snapshot = self._select_usable_snapshot(snapshot)
+            ttl_seconds = self.refresh_interval_seconds(now)
+            with_ttl = self._snapshot_with_cache_ttl(usable_snapshot, ttl_seconds=ttl_seconds)
+            self._cached_snapshot = with_ttl
+            self._cached_until = now + timedelta(seconds=ttl_seconds)
+            return with_ttl
 
     def _build_snapshot(self) -> MarketSnapshot:
         usd_ils, usd_ils_change_pct = self._fetch_quote_with_change("USDILS=X")
@@ -88,8 +110,33 @@ class MarketSnapshotService:
             vix_change_pct=vix_change_pct,
             spy_change_pct=spy_change_pct,
             qqq_change_pct=qqq_change_pct,
-            cache_ttl_seconds=self._cache_ttl,
+            cache_ttl_seconds=self.refresh_interval_seconds(now),
         )
+
+    def _select_usable_snapshot(self, snapshot: MarketSnapshot) -> MarketSnapshot:
+        if self._is_usable_snapshot(snapshot):
+            self._last_known_good_snapshot = snapshot
+            return snapshot
+        if self._last_known_good_snapshot:
+            return self._last_known_good_snapshot
+        return snapshot
+
+    @staticmethod
+    def _snapshot_with_cache_ttl(snapshot: MarketSnapshot, *, ttl_seconds: int) -> MarketSnapshot:
+        return replace(snapshot, cache_ttl_seconds=max(30, int(ttl_seconds)))
+
+    @staticmethod
+    def _is_usable_snapshot(snapshot: MarketSnapshot) -> bool:
+        meaningful_values = (
+            snapshot.usd_ils,
+            snapshot.usd_ils_change_pct,
+            snapshot.fear_greed_score,
+            snapshot.vix,
+            snapshot.vix_change_pct,
+            snapshot.spy_change_pct,
+            snapshot.qqq_change_pct,
+        )
+        return any(value is not None for value in meaningful_values)
 
     def _fetch_quote_with_change(self, symbol: str) -> tuple[float | None, float | None]:
         try:

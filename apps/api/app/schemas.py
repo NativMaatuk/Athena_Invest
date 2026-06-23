@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 class HealthResponse(BaseModel):
     status: str = "ok"
     service: str = "athena-web-api"
+    watchlist_storage_backend: str = "unknown"
+    internal_schedulers_enabled: bool = True
 
 
 class SuggestionItem(BaseModel):
