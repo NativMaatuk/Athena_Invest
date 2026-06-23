@@ -9,6 +9,8 @@ import {
   fetchMarketSnapshot,
   sendPresenceHeartbeat,
 } from "@/lib/api";
+import { useInitialMarketSnapshot } from "@/app/components/market-snapshot-provider";
+import { marketRefreshIntervalMs } from "@/lib/market-hours";
 
 const PRESENCE_REFRESH_MS = 45_000;
 const PRESENCE_STORAGE_KEY = "athena-presence-session-id";
@@ -82,10 +84,13 @@ function fearGreedColorClass(score: number | null | undefined, rating: string | 
 
 type MarketTopBarProps = {
   onActiveUsersChange?: (count: number | null) => void;
+  initialSnapshot?: MarketSnapshot | null;
 };
 
-export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
-  const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(null);
+export function MarketTopBar({ onActiveUsersChange, initialSnapshot = null }: MarketTopBarProps) {
+  const contextSnapshot = useInitialMarketSnapshot();
+  const resolvedInitialSnapshot = initialSnapshot ?? contextSnapshot ?? null;
+  const [snapshot, setSnapshot] = useState<MarketSnapshot | null>(resolvedInitialSnapshot);
   const [activeUsers, setActiveUsers] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const marqueeViewportRef = useRef<HTMLDivElement | null>(null);
@@ -94,6 +99,22 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
 
   useEffect(() => {
     let active = true;
+    let timeoutId: number | null = null;
+    let retryAttempt = 0;
+
+    const retryDelaysMs = [1500, 4000];
+
+    const scheduleNext = (delayMs: number) => {
+      if (!active) {
+        return;
+      }
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutId = window.setTimeout(() => {
+        void loadSnapshot();
+      }, delayMs);
+    };
 
     const loadSnapshot = async () => {
       try {
@@ -103,6 +124,8 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
         }
         setSnapshot(payload);
         setError(null);
+        retryAttempt = 0;
+        scheduleNext(marketRefreshIntervalMs());
       } catch (err) {
         if (!active) {
           return;
@@ -115,17 +138,24 @@ export function MarketTopBar({ onActiveUsersChange }: MarketTopBarProps) {
         } else {
           setError(fallbackMessage);
         }
+        if (retryAttempt < retryDelaysMs.length) {
+          const delayMs = retryDelaysMs[retryAttempt];
+          retryAttempt += 1;
+          scheduleNext(delayMs);
+          return;
+        }
+        retryAttempt = 0;
+        scheduleNext(marketRefreshIntervalMs());
       }
     };
 
     void loadSnapshot();
-    const dataInterval = window.setInterval(() => {
-      void loadSnapshot();
-    }, 5 * 60 * 1000);
 
     return () => {
       active = false;
-      window.clearInterval(dataInterval);
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, []);
 

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 import uuid
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from src.shared.errors import ExternalServiceError, RequestTimeoutError, TickerNotFoundError, ValidationError
 
-from .dependencies import get_market_snapshot_scheduler, get_settings, get_watchlist_scheduler
+from .dependencies import (
+    get_market_snapshot_scheduler,
+    get_settings,
+    get_watchlist_scheduler,
+    get_watchlist_storage_backend,
+)
 from .error_handlers import (
     external_error_handler,
     http_exception_handler,
@@ -24,9 +30,20 @@ from .routers.presence import router as presence_router
 from .routers.ticker import router as ticker_router
 from .routers.watchlist import router as watchlist_router
 
+logger = logging.getLogger(__name__)
+
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    watchlist_backend = get_watchlist_storage_backend()
+    logger.info(
+        "starting athena web api",
+        extra={
+            "runtime_environment": settings.runtime_environment,
+            "watchlist_storage_backend": watchlist_backend,
+            "internal_schedulers_enabled": settings.enable_internal_schedulers,
+        },
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
